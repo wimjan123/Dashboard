@@ -151,7 +151,7 @@ const TravelWidget: React.FC = () => {
       const routeResults = await Promise.allSettled(routePromises)
       
       const validRoutes: Route[] = []
-      routeResults.forEach((result, index) => {
+      routeResults.forEach((result) => {
         if (result.status === 'fulfilled' && result.value) {
           validRoutes.push(result.value)
         }

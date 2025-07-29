@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Plus, Trash2, RefreshCw, AlertCircle, CheckCircle, Clock, ExternalLink } from 'lucide-react'
+import { X, Plus, Trash2, RefreshCw, AlertCircle, CheckCircle, Clock } from 'lucide-react'
 import { taskIntegrationManager } from '../utils/taskIntegrations/manager'
 import { TaskIntegrationConfig, TaskSyncStatus } from '../utils/taskIntegrations/types'
 

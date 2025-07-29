@@ -31,8 +31,7 @@ const Dashboard: React.FC = () => {
     handleDragEnd,
     handleDrop,
     getAvailableTileTypes,
-    resetToDefaults,
-    TILE_TYPES
+    resetToDefaults
   } = useDynamicTiles()
 
   const [showAddTile, setShowAddTile] = useState(false)

@@ -23,9 +23,9 @@ class GitHubIntegration implements TaskIntegration {
       if (response.ok) {
         const user = await response.json()
         this.accessToken = credentials.accessToken
-        this.username = credentials.username || user.login
+        this.username = credentials.username || user.login || 'unknown'
         localStorage.setItem('github-access-token', credentials.accessToken)
-        localStorage.setItem('github-username', this.username)
+        localStorage.setItem('github-username', this.username!)
         return true
       }
       return false
@@ -69,13 +69,13 @@ class GitHubIntegration implements TaskIntegration {
     }
   }
 
-  async createTask(task: Partial<ExternalTask>): Promise<ExternalTask> {
+  async createTask(_task: Partial<ExternalTask>): Promise<ExternalTask> {
     // GitHub issues can only be created in specific repositories
     // This would require additional repository selection logic
     throw new Error('Creating GitHub issues requires repository selection - not implemented in basic integration')
   }
 
-  async updateTask(id: string, updates: Partial<ExternalTask>): Promise<ExternalTask> {
+  async updateTask(_id: string, updates: Partial<ExternalTask>): Promise<ExternalTask> {
     if (!this.accessToken) throw new Error('Not authenticated')
 
     try {
@@ -94,7 +94,7 @@ class GitHubIntegration implements TaskIntegration {
     }
   }
 
-  async deleteTask(id: string): Promise<void> {
+  async deleteTask(_id: string): Promise<void> {
     // GitHub issues cannot be deleted via API, only closed
     throw new Error('GitHub issues cannot be deleted, only closed')
   }
