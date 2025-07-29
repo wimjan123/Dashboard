@@ -4,10 +4,9 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { 
   fetchWeatherData, 
   searchLocations as apiSearchLocations, 
-  getCurrentLocation,
+  getCurrentLocation as getGeoLocation,
   setApiKey,
   isWeatherApiConfigured,
-  getConfiguredProviders,
   WeatherData,
   LocationData
 } from '../utils/weatherApi'
@@ -42,7 +41,7 @@ const WeatherWidget: React.FC = () => {
     { id: 'tokyo', name: 'Tokyo', lat: 35.6762, lon: 139.6503, country: 'JP' },
   ]
 
-  const getCurrentLocation = (): SavedLocation => {
+  const getCurrentLocationData = (): SavedLocation => {
     const allLocations = [...defaultLocations, ...savedLocations]
     return allLocations.find(loc => loc.id === currentLocationId) || defaultLocations[0]
   }
@@ -76,15 +75,10 @@ const WeatherWidget: React.FC = () => {
     }
   }
 
-  const getCurrentLocationData = (): SavedLocation => {
-    const allLocations = [...defaultLocations, ...savedLocations]
-    return allLocations.find(loc => loc.id === currentLocationId) || defaultLocations[0]
-  }
-
   const useCurrentLocation = async () => {
     setIsGettingLocation(true)
     try {
-      const coords = await getCurrentLocation()
+      const coords = await getGeoLocation()
       
       // Create a temporary location for current position
       const currentPosLocation: SavedLocation = {

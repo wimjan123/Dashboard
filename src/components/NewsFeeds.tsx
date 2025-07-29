@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { ExternalLink, RefreshCw, Info, AlertTriangle, CheckCircle, Clock, Plus } from 'lucide-react'
-import { fetchFeedsByCategory, NewsItem, getFeedStats, RSS_FEEDS, RSSFeed, validateFeedHealth } from '../utils/rssParser'
+import { ExternalLink, RefreshCw, Info, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { fetchFeedsByCategory, NewsItem, getFeedStats, RSS_FEEDS, validateFeedHealth } from '../utils/rssParser'
 
 const NewsFeeds: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([])
