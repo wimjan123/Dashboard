@@ -19,6 +19,7 @@ node_modules/.cache/
 .npm/
 .yarn/
 .pnpm-store/
+.tsbuildinfo
 
 # Environment files
 .env

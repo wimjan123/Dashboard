@@ -5,14 +5,21 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run clean && tsc && vite build",
+    "build:fast": "vite build",
     "preview": "vite preview",
+    "clean": "npm run clean:dist && npm run clean:cache && npm run clean:tauri",
+    "clean:dist": "rm -rf dist",
+    "clean:cache": "rm -rf .tsbuildinfo && rm -rf node_modules/.cache && rm -rf node_modules/.vite",
+    "clean:tauri": "cd src-tauri && cargo clean",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "npm run clean && tauri build",
+    "tauri:build:fast": "tauri build",
     "tauri:build-win": "tauri build --target x86_64-pc-windows-msvc",
     "tauri:build-mac": "tauri build --target x86_64-apple-darwin",
     "tauri:build-mac-silicon": "tauri build --target aarch64-apple-darwin",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint . --ext ts,tsx --fix",
     "test": "vitest"
   },
   "dependencies": {

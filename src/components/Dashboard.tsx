@@ -1,15 +1,17 @@
-import React, { useState } from 'react'
+import React, { useState, Suspense } from 'react'
 import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X } from 'lucide-react'
-import NewsFeeds from './NewsFeeds'
-import WeatherWidget from './WeatherWidget'
-import TodoList from './TodoList'
-import Shortcuts from './Shortcuts'
-import Livestreams from './Livestreams'
-import AIChat from './AIChat'
-import Minigames from './Minigames'
-import TravelWidget from './TravelWidget'
-import AddTileModal from './AddTileModal'
+import { lazy } from 'react'
 import { useDynamicTiles } from '../hooks/useDynamicTiles'
+
+const NewsFeeds = lazy(() => import('./NewsFeeds'))
+const WeatherWidget = lazy(() => import('./WeatherWidget'))
+const TodoList = lazy(() => import('./TodoList'))
+const Shortcuts = lazy(() => import('./Shortcuts'))
+const Livestreams = lazy(() => import('./Livestreams'))
+const AIChat = lazy(() => import('./AIChat'))
+const Minigames = lazy(() => import('./Minigames'))
+const TravelWidget = lazy(() => import('./TravelWidget'))
+const AddTileModal = lazy(() => import('./AddTileModal'))
 
 const Dashboard: React.FC = () => {
   const { 
@@ -137,26 +139,34 @@ const Dashboard: React.FC = () => {
   const fullscreenTile = getFullscreenTile()
 
   const renderTileContent = (tileType: string) => {
-    switch (tileType) {
-      case 'news':
-        return <NewsFeeds />
-      case 'weather':
-        return <WeatherWidget />
-      case 'todo':
-        return <TodoList />
-      case 'shortcuts':
-        return <Shortcuts />
-      case 'livestreams':
-        return <Livestreams />
-      case 'ai-chat':
-        return <AIChat />
-      case 'minigames':
-        return <Minigames />
-      case 'travel':
-        return <TravelWidget />
-      default:
-        return <div className="text-center text-dark-text-secondary">Unknown tile type</div>
-    }
+    const content = (() => {
+      switch (tileType) {
+        case 'news':
+          return <NewsFeeds />
+        case 'weather':
+          return <WeatherWidget />
+        case 'todo':
+          return <TodoList />
+        case 'shortcuts':
+          return <Shortcuts />
+        case 'livestreams':
+          return <Livestreams />
+        case 'ai-chat':
+          return <AIChat />
+        case 'minigames':
+          return <Minigames />
+        case 'travel':
+          return <TravelWidget />
+        default:
+          return <div className="text-center text-dark-text-secondary">Unknown tile type</div>
+      }
+    })()
+    
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-full text-dark-text-secondary">Loading...</div>}>
+        {content}
+      </Suspense>
+    )
   }
 
   const getTileIcon = (tileType: string) => {
