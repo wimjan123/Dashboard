@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { ExternalLink, RefreshCw, Info, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { ExternalLink, RefreshCw, Info, AlertTriangle, CheckCircle, Clock, Settings } from 'lucide-react'
 import { fetchFeedsByCategory, NewsItem, getFeedStats, RSS_FEEDS, validateFeedHealth } from '../utils/rssParser'
+import ManageSourcesModal from './ManageSourcesModal'
 
 const NewsFeeds: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([])
@@ -10,6 +11,9 @@ const NewsFeeds: React.FC = () => {
   const [showHealthMonitor, setShowHealthMonitor] = useState(false)
   const [feedHealthStatus, setFeedHealthStatus] = useState<Record<string, boolean>>({})
   const [healthCheckLoading, setHealthCheckLoading] = useState(false)
+  const [showManageSources, setShowManageSources] = useState(false)
+  const [enabledSources, setEnabledSources] = useState<Set<string>>(new Set())
+  const [customFeeds, setCustomFeeds] = useState<any[]>([])
 
   const feeds = [
     { id: 'general', name: 'General', color: 'bg-blue-500' },
@@ -20,6 +24,45 @@ const NewsFeeds: React.FC = () => {
     { id: 'entertainment', name: 'Entertainment', color: 'bg-pink-500' },
     { id: 'x', name: 'X (Twitter)', color: 'bg-black' },
   ]
+
+  // Load user preferences
+  useEffect(() => {
+    const savedSources = localStorage.getItem('dashboard-enabled-sources')
+    if (savedSources) {
+      setEnabledSources(new Set(JSON.parse(savedSources)))
+    } else {
+      // Default: enable first 10 sources to reduce clutter
+      const defaultEnabled = RSS_FEEDS.slice(0, 10).map(feed => feed.id)
+      setEnabledSources(new Set(defaultEnabled))
+    }
+
+    const savedCustom = localStorage.getItem('dashboard-custom-feeds')
+    if (savedCustom) {
+      setCustomFeeds(JSON.parse(savedCustom))
+    }
+  }, [])
+
+  // Get filtered RSS feeds based on user preferences
+  const getFilteredFeeds = () => {
+    const allFeeds = [...RSS_FEEDS, ...customFeeds]
+    return allFeeds.filter(feed => enabledSources.has(feed.id))
+  }
+
+  const handleSourcesUpdate = () => {
+    // Reload preferences
+    const savedSources = localStorage.getItem('dashboard-enabled-sources')
+    if (savedSources) {
+      setEnabledSources(new Set(JSON.parse(savedSources)))
+    }
+
+    const savedCustom = localStorage.getItem('dashboard-custom-feeds')
+    if (savedCustom) {
+      setCustomFeeds(JSON.parse(savedCustom))
+    }
+
+    // Refresh news with new settings
+    loadNews()
+  }
 
   // Mock data as fallback
   const getMockNews = (category: string): NewsItem[] => {
@@ -144,7 +187,7 @@ const NewsFeeds: React.FC = () => {
     
     // Then try to load real data in background for other feeds
     try {
-      const newsItems = await fetchFeedsByCategory(selectedFeed)
+      const newsItems = await fetchFeedsByCategory(selectedFeed, customFeeds)
       if (newsItems && newsItems.length > 0) {
         setNews(newsItems)
         // Update stats after loading
@@ -174,7 +217,8 @@ const NewsFeeds: React.FC = () => {
 
   const checkFeedHealth = async () => {
     setHealthCheckLoading(true)
-    const categoryFeeds = RSS_FEEDS.filter(feed => selectedFeed === 'all' || feed.category === selectedFeed)
+    const filteredFeeds = getFilteredFeeds()
+    const categoryFeeds = filteredFeeds.filter(feed => selectedFeed === 'all' || feed.category === selectedFeed)
     const healthResults: Record<string, boolean> = {}
     
     // Check health of feeds in parallel
@@ -208,7 +252,8 @@ const NewsFeeds: React.FC = () => {
   }
 
   const getHealthSummary = () => {
-    const categoryFeeds = RSS_FEEDS.filter(feed => selectedFeed === 'all' || feed.category === selectedFeed)
+    const filteredFeeds = getFilteredFeeds()
+    const categoryFeeds = filteredFeeds.filter(feed => selectedFeed === 'all' || feed.category === selectedFeed)
     const checkedFeeds = categoryFeeds.filter(feed => feedHealthStatus[feed.id] !== undefined)
     const healthyFeeds = categoryFeeds.filter(feed => feedHealthStatus[feed.id] === true)
     
@@ -251,9 +296,18 @@ const NewsFeeds: React.FC = () => {
           {feedStats && selectedFeed !== 'x' && (
             <div className="flex items-center space-x-1 text-xs text-dark-text-secondary">
               <Info className="w-3 h-3" />
-              <span>{feedStats.total} sources</span>
+              <span>{enabledSources.size} sources</span>
             </div>
           )}
+          
+          {/* Manage Sources Button */}
+          <button
+            onClick={() => setShowManageSources(true)}
+            className="p-2 rounded-lg bg-dark-card hover:bg-opacity-80 transition-all duration-200 group"
+            title="Manage news sources"
+          >
+            <Settings className="w-4 h-4 text-dark-text-secondary group-hover:text-dark-text" />
+          </button>
           
           {/* Health Monitor Button */}
           {selectedFeed !== 'x' && (
@@ -310,7 +364,7 @@ const NewsFeeds: React.FC = () => {
           </div>
           
           <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto scrollbar-thin">
-            {RSS_FEEDS
+            {getFilteredFeeds()
               .filter(feed => selectedFeed === 'all' || feed.category === selectedFeed)
               .map((feed) => (
                 <div
@@ -387,6 +441,13 @@ const NewsFeeds: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Manage Sources Modal */}
+      <ManageSourcesModal
+        isOpen={showManageSources}
+        onClose={() => setShowManageSources(false)}
+        onSourcesUpdate={handleSourcesUpdate}
+      />
     </div>
   )
 }

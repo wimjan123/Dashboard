@@ -278,8 +278,16 @@ export const getFeedStats = (category?: string): { total: number; healthy: numbe
   }
 }
 
-export const fetchFeedsByCategory = async (category: string): Promise<NewsItem[]> => {
-  const categoryFeeds = RSS_FEEDS.filter(feed => feed.category === category)
+export const fetchFeedsByCategory = async (category: string, customFeeds: RSSFeed[] = []): Promise<NewsItem[]> => {
+  // Get enabled sources from localStorage
+  const savedSources = localStorage.getItem('dashboard-enabled-sources')
+  const enabledSources = savedSources ? new Set(JSON.parse(savedSources)) : new Set(RSS_FEEDS.slice(0, 10).map(f => f.id))
+  
+  // Combine default and custom feeds, then filter by enabled and category
+  const allFeeds = [...RSS_FEEDS, ...customFeeds]
+  const categoryFeeds = allFeeds.filter(feed => 
+    feed.category === category && enabledSources.has(feed.id)
+  )
   
   if (categoryFeeds.length === 0) {
     return [{
