@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react'
-import { Sun, Cloud, CloudRain, Wind, Droplets, Thermometer, Settings, MapPin, Search, Plus, X } from 'lucide-react'
+import { Sun, Cloud, CloudRain, Wind, Droplets, Thermometer, Settings, MapPin, Search, Plus, X, Key, RefreshCw, Navigation } from 'lucide-react'
 import { useLocalStorage } from '../hooks/useLocalStorage'
-
-interface WeatherData {
-  location: string
-  temperature: number
-  condition: string
-  humidity: number
-  windSpeed: number
-  feelsLike: number
-  icon: string
-}
+import { 
+  fetchWeatherData, 
+  searchLocations as apiSearchLocations, 
+  getCurrentLocation,
+  setApiKey,
+  isWeatherApiConfigured,
+  getConfiguredProviders,
+  WeatherData,
+  LocationData
+} from '../utils/weatherApi'
 
 interface SavedLocation {
   id: string
@@ -18,17 +18,22 @@ interface SavedLocation {
   lat: number
   lon: number
   country: string
+  state?: string
 }
 
 const WeatherWidget: React.FC = () => {
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [savedLocations, setSavedLocations] = useLocalStorage<SavedLocation[]>('weather-locations', [])
   const [currentLocationId, setCurrentLocationId] = useLocalStorage<string>('weather-current-location', 'default')
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SavedLocation[]>([])
+  const [searchResults, setSearchResults] = useState<LocationData[]>([])
   const [useMetric, setUseMetric] = useLocalStorage<boolean>('weather-use-metric', true)
+  const [apiKeys, setApiKeys] = useLocalStorage<Record<string, string>>('weather-api-keys', {})
+  const [showApiSettings, setShowApiSettings] = useState(false)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
 
   const defaultLocations: SavedLocation[] = [
     { id: 'default', name: 'San Francisco', lat: 37.7749, lon: -122.4194, country: 'US' },
@@ -42,36 +47,65 @@ const WeatherWidget: React.FC = () => {
     return allLocations.find(loc => loc.id === currentLocationId) || defaultLocations[0]
   }
 
-  const getMockWeatherData = (location: SavedLocation): WeatherData => {
-    // Different mock data based on location
-    const mockData: Record<string, Partial<WeatherData>> = {
-      'default': { temperature: 22, condition: 'Partly Cloudy', humidity: 65, windSpeed: 12, feelsLike: 24 },
-      'nyc': { temperature: 18, condition: 'Sunny', humidity: 45, windSpeed: 8, feelsLike: 20 },
-      'london': { temperature: 15, condition: 'Rainy', humidity: 80, windSpeed: 15, feelsLike: 13 },
-      'tokyo': { temperature: 25, condition: 'Cloudy', humidity: 70, windSpeed: 10, feelsLike: 27 },
-    }
+  const loadWeather = async () => {
+    setLoading(true)
+    setError(null)
     
-    const base = mockData[location.id] || mockData['default']
-    return {
-      location: `${location.name}, ${location.country}`,
-      temperature: useMetric ? base.temperature! : Math.round(base.temperature! * 9/5 + 32),
-      condition: base.condition!,
-      humidity: base.humidity!,
-      windSpeed: useMetric ? base.windSpeed! : Math.round(base.windSpeed! * 0.621371),
-      feelsLike: useMetric ? base.feelsLike! : Math.round(base.feelsLike! * 9/5 + 32),
-      icon: base.condition!.toLowerCase().replace(' ', '-')
+    try {
+      const location = getCurrentLocationData()
+      const weatherData = await fetchWeatherData(location.lat, location.lon, useMetric)
+      setWeather(weatherData)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load weather data'
+      setError(errorMessage)
+      console.error('Weather loading error:', err)
+      
+      // Fallback to mock data if API fails
+      const location = getCurrentLocationData()
+      setWeather({
+        location: `${location.name}, ${location.country}`,
+        temperature: useMetric ? 22 : 72,
+        condition: 'Data Unavailable',
+        humidity: 50,
+        windSpeed: useMetric ? 10 : 6,
+        feelsLike: useMetric ? 24 : 75,
+        icon: 'unknown'
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
-  const loadWeather = async () => {
-    setLoading(true)
-    const location = getCurrentLocation()
-    
-    // For now, use mock data
-    setTimeout(() => {
-      setWeather(getMockWeatherData(location))
-      setLoading(false)
-    }, 800)
+  const getCurrentLocationData = (): SavedLocation => {
+    const allLocations = [...defaultLocations, ...savedLocations]
+    return allLocations.find(loc => loc.id === currentLocationId) || defaultLocations[0]
+  }
+
+  const useCurrentLocation = async () => {
+    setIsGettingLocation(true)
+    try {
+      const coords = await getCurrentLocation()
+      
+      // Create a temporary location for current position
+      const currentPosLocation: SavedLocation = {
+        id: 'current-location',
+        name: 'Current Location',
+        lat: coords.lat,
+        lon: coords.lon,
+        country: 'Unknown'
+      }
+      
+      // Add to saved locations if not already present
+      if (!savedLocations.find(loc => loc.id === 'current-location')) {
+        setSavedLocations([currentPosLocation, ...savedLocations])
+      }
+      
+      setCurrentLocationId('current-location')
+    } catch (err) {
+      setError('Could not get current location. Please allow location access.')
+    } finally {
+      setIsGettingLocation(false)
+    }
   }
 
   useEffect(() => {
@@ -84,22 +118,36 @@ const WeatherWidget: React.FC = () => {
       return
     }
     
-    // Mock location search results
-    const mockResults: SavedLocation[] = [
-      { id: 'paris', name: 'Paris', lat: 48.8566, lon: 2.3522, country: 'FR' },
-      { id: 'berlin', name: 'Berlin', lat: 52.5200, lon: 13.4050, country: 'DE' },
-      { id: 'sydney', name: 'Sydney', lat: -33.8688, lon: 151.2093, country: 'AU' },
-    ].filter(loc => loc.name.toLowerCase().includes(query.toLowerCase()))
-    
-    setSearchResults(mockResults)
+    try {
+      const results = await apiSearchLocations(query)
+      setSearchResults(results)
+    } catch (error) {
+      console.error('Location search failed:', error)
+      // Keep empty results if search fails
+      setSearchResults([])
+    }
   }
 
-  const addLocation = (location: SavedLocation) => {
+  const addLocation = (location: LocationData) => {
+    const savedLocation: SavedLocation = {
+      id: location.id,
+      name: location.name,
+      lat: location.lat,
+      lon: location.lon,
+      country: location.country,
+      state: location.state
+    }
+    
     if (!savedLocations.find(loc => loc.id === location.id)) {
-      setSavedLocations([...savedLocations, location])
+      setSavedLocations([...savedLocations, savedLocation])
     }
     setSearchQuery('')
     setSearchResults([])
+  }
+
+  const saveApiKey = (provider: string, key: string) => {
+    setApiKey(provider, key)
+    setApiKeys({ ...apiKeys, [provider]: key })
   }
 
   const removeLocation = (locationId: string) => {
@@ -114,16 +162,26 @@ const WeatherWidget: React.FC = () => {
     setShowSettings(false)
   }
 
-  const getWeatherIcon = (condition: string) => {
-    switch (condition.toLowerCase()) {
-      case 'sunny':
-        return <Sun className="w-12 h-12 text-yellow-400 animate-pulse-soft" />
-      case 'partly cloudy':
-        return <Cloud className="w-12 h-12 text-blue-300 animate-pulse-soft" />
-      case 'rainy':
-        return <CloudRain className="w-12 h-12 text-blue-500 animate-pulse-soft" />
-      default:
-        return <Sun className="w-12 h-12 text-yellow-400 animate-pulse-soft" />
+  const getWeatherIcon = (condition: string, iconCode?: string) => {
+    // If we have an actual weather icon URL from the API, use it
+    if (iconCode && iconCode.startsWith('http')) {
+      return <img src={iconCode} alt={condition} className="w-12 h-12" />
+    }
+    
+    // Otherwise use Lucide icons based on condition
+    const conditionLower = condition.toLowerCase()
+    if (conditionLower.includes('sun') || conditionLower.includes('clear')) {
+      return <Sun className="w-12 h-12 text-yellow-400 animate-pulse-soft" />
+    } else if (conditionLower.includes('cloud') && !conditionLower.includes('rain')) {
+      return <Cloud className="w-12 h-12 text-blue-300 animate-pulse-soft" />
+    } else if (conditionLower.includes('rain') || conditionLower.includes('drizzle') || conditionLower.includes('shower')) {
+      return <CloudRain className="w-12 h-12 text-blue-500 animate-pulse-soft" />
+    } else if (conditionLower.includes('snow')) {
+      return <Cloud className="w-12 h-12 text-white animate-pulse-soft" />
+    } else if (conditionLower.includes('wind')) {
+      return <Wind className="w-12 h-12 text-green-400 animate-pulse-soft" />
+    } else {
+      return <Sun className="w-12 h-12 text-yellow-400 animate-pulse-soft" />
     }
   }
 
@@ -141,16 +199,29 @@ const WeatherWidget: React.FC = () => {
     <div className="h-full flex flex-col">
       {/* Header with Settings */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-2">
-          <MapPin className="w-4 h-4 text-sky-400" />
+        <div className="flex items-center space-x-2 flex-1 min-w-0">
+          <MapPin className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <span className="text-sm text-dark-text truncate">{weather.location}</span>
+          {error && (
+            <span className="text-xs text-red-400 truncate">({error})</span>
+          )}
         </div>
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={loadWeather}
+            disabled={loading}
+            className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text disabled:opacity-50"
+            title="Refresh weather"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {!showSettings ? (
@@ -167,7 +238,7 @@ const WeatherWidget: React.FC = () => {
             </div>
             
             <div className="text-center">
-              {getWeatherIcon(weather.condition)}
+              {getWeatherIcon(weather.condition, weather.icon)}
               <div className="text-sm text-dark-text-secondary mt-2">
                 {weather.condition}
               </div>
@@ -203,12 +274,121 @@ const WeatherWidget: React.FC = () => {
                 {weather.feelsLike}°{useMetric ? 'C' : 'F'}
               </span>
             </div>
+
+            {/* Additional weather details */}
+            {weather.pressure && (
+              <div className="flex items-center justify-between p-3 rounded-lg bg-dark-card">
+                <div className="flex items-center">
+                  <span className="w-4 h-4 text-purple-400 mr-2 text-xs">⭲</span>
+                  <span className="text-sm text-dark-text-secondary">Pressure</span>
+                </div>
+                <span className="text-sm font-medium text-dark-text">
+                  {weather.pressure} hPa
+                </span>
+              </div>
+            )}
+
+            {weather.visibility && (
+              <div className="flex items-center justify-between p-3 rounded-lg bg-dark-card">
+                <div className="flex items-center">
+                  <span className="w-4 h-4 text-cyan-400 mr-2 text-xs">👁</span>
+                  <span className="text-sm text-dark-text-secondary">Visibility</span>
+                </div>
+                <span className="text-sm font-medium text-dark-text">
+                  {weather.visibility} km
+                </span>
+              </div>
+            )}
+
+            {weather.sunrise && weather.sunset && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-dark-card">
+                  <div className="flex items-center">
+                    <span className="w-4 h-4 text-orange-400 mr-2 text-xs">🌅</span>
+                    <span className="text-sm text-dark-text-secondary">Sunrise</span>
+                  </div>
+                  <span className="text-sm font-medium text-dark-text">
+                    {weather.sunrise}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-dark-card">
+                  <div className="flex items-center">
+                    <span className="w-4 h-4 text-orange-600 mr-2 text-xs">🌇</span>
+                    <span className="text-sm text-dark-text-secondary">Sunset</span>
+                  </div>
+                  <span className="text-sm font-medium text-dark-text">
+                    {weather.sunset}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
         <div className="flex-1 overflow-hidden">
           {/* Settings Panel */}
           <div className="space-y-4">
+            {/* API Status & Configuration */}
+            <div className="p-3 rounded-lg bg-dark-card">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-dark-text">Weather Data</span>
+                <button
+                  onClick={() => setShowApiSettings(!showApiSettings)}
+                  className="p-1 text-dark-text-secondary hover:text-dark-text transition-colors duration-200"
+                  title="Configure API keys"
+                >
+                  <Key className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="text-xs text-dark-text-secondary">
+                {isWeatherApiConfigured() ? (
+                  <span className="text-green-400">✓ API configured - Real data available</span>
+                ) : (
+                  <span className="text-orange-400">⚠ Using demo data - Configure API for real weather</span>
+                )}
+              </div>
+              
+              {showApiSettings && (
+                <div className="mt-3 space-y-2">
+                  <div>
+                    <label className="block text-xs font-medium text-dark-text mb-1">
+                      OpenWeatherMap API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={apiKeys.openweather || ''}
+                      onChange={(e) => saveApiKey('openweather', e.target.value)}
+                      placeholder="Enter API key..."
+                      className="w-full px-2 py-1 bg-dark-bg border border-dark-border rounded text-dark-text text-xs focus:outline-none focus:border-sky-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-dark-text mb-1">
+                      WeatherAPI Key
+                    </label>
+                    <input
+                      type="password"
+                      value={apiKeys.weatherapi || ''}
+                      onChange={(e) => saveApiKey('weatherapi', e.target.value)}
+                      placeholder="Enter API key..."
+                      className="w-full px-2 py-1 bg-dark-bg border border-dark-border rounded text-dark-text text-xs focus:outline-none focus:border-sky-400"
+                    />
+                  </div>
+                  <p className="text-xs text-dark-text-secondary">
+                    Free keys available at{' '}
+                    <a href="https://openweathermap.org/api" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">
+                      OpenWeatherMap
+                    </a>{' '}
+                    and{' '}
+                    <a href="https://weatherapi.com" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">
+                      WeatherAPI
+                    </a>
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Units Toggle */}
             <div className="p-3 rounded-lg bg-dark-card">
               <div className="flex items-center justify-between">
@@ -232,6 +412,20 @@ const WeatherWidget: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* Current Location */}
+            <div className="p-3 rounded-lg bg-dark-card">
+              <button
+                onClick={useCurrentLocation}
+                disabled={isGettingLocation}
+                className="w-full flex items-center justify-center space-x-2 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-700 text-white rounded-lg transition-colors duration-200"
+              >
+                <Navigation className={`w-4 h-4 ${isGettingLocation ? 'animate-spin' : ''}`} />
+                <span className="text-sm">
+                  {isGettingLocation ? 'Getting Location...' : 'Use Current Location'}
+                </span>
+              </button>
             </div>
 
             {/* Location Search */}
