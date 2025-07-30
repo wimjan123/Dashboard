@@ -1,10 +1,8 @@
-import React, { useState, Suspense, useRef, useLayoutEffect } from 'react'
-import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X, Move, Save } from 'lucide-react'
+import React, { useState, Suspense, useRef } from 'react'
+import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X, Save } from 'lucide-react'
 import { lazy } from 'react'
 import { useDynamicTiles } from '../hooks/useDynamicTiles'
 import ThemeSelector from './ThemeSelector'
-import { Resizable } from 're-resizable'
-import Draggable from 'react-draggable'
 
 const NewsFeeds = lazy(() => import('./NewsFeeds'))
 const WeatherWidget = lazy(() => import('./WeatherWidget'))
@@ -25,6 +23,7 @@ const Dashboard: React.FC = () => {
     duplicateTile,
     removeTile,
     updateTile,
+    reorderTiles,
     getTileClass,
     getSortedTiles,
     getFullscreenTile,
@@ -35,68 +34,44 @@ const Dashboard: React.FC = () => {
     resetToDefaults
   } = useDynamicTiles()
 
-  // Store tile sizes and positions in state
-  const [tilePositions, setTilePositions] = useState<{ [id: string]: { x: number; y: number } }>(() => {
-    const saved = localStorage.getItem('dashboard-tile-positions')
-    return saved ? JSON.parse(saved) : {}
-  })
-
-  const [tileSizes, setTileSizes] = useState<{ [id: string]: { width: number; height: number } }>(() => {
-    const saved = localStorage.getItem('dashboard-tile-sizes')
-    return saved ? JSON.parse(saved) : {}
-  })
-
-  const updateTilePosition = (id: string, x: number, y: number) => {
-    setTilePositions(positions => {
-      const updated = { ...positions, [id]: { x, y } }
-      localStorage.setItem('dashboard-tile-positions', JSON.stringify(updated))
-      return updated
-    })
-  }
-
-  const updateTileSize = (id: string, width: number, height: number) => {
-    setTileSizes(sizes => {
-      const updated = { ...sizes, [id]: { width, height } }
-      localStorage.setItem('dashboard-tile-sizes', JSON.stringify(updated))
-      return updated
-    })
-  }
 
   const [showAddTile, setShowAddTile] = useState(false)
+  const [draggedTileId, setDraggedTileId] = useState<string | null>(null)
+  const [dragOverTileId, setDragOverTileId] = useState<string | null>(null)
   const tileRefs = useRef<{ [id: string]: HTMLDivElement | null }>({})
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  // Calculate actual positions of tiles from their current DOM layout
-  const calculateTilePositions = () => {
-    if (!containerRef.current) return
-    
-    const containerRect = containerRef.current.getBoundingClientRect()
-    const newPositions: { [id: string]: { x: number; y: number } } = {}
-    
-    getSortedTiles().forEach(tile => {
-      const tileElement = tileRefs.current[tile.id]
-      if (tileElement) {
-        const tileRect = tileElement.getBoundingClientRect()
-        newPositions[tile.id] = {
-          x: tileRect.left - containerRect.left,
-          y: tileRect.top - containerRect.top
-        }
-      }
-    })
-    
-    setTilePositions(positions => {
-      const updated = { ...positions, ...newPositions }
-      localStorage.setItem('dashboard-tile-positions', JSON.stringify(updated))
-      return updated
-    })
+
+  // Drag and drop handlers for grid rearrangement
+  const handleDragStart = (tileId: string) => {
+    if (!editMode) return
+    setDraggedTileId(tileId)
   }
 
-  // When entering edit mode, capture current positions to prevent jumping
-  useLayoutEffect(() => {
-    if (editMode) {
-      calculateTilePositions()
-    }
-  }, [editMode])
+  const handleDragEnd = () => {
+    setDraggedTileId(null)
+    setDragOverTileId(null)
+  }
+
+  const handleDragOver = (e: React.DragEvent, tileId: string) => {
+    e.preventDefault()
+    if (!editMode) return
+    setDragOverTileId(tileId)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverTileId(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, targetTileId: string) => {
+    e.preventDefault()
+    if (!editMode || !draggedTileId || draggedTileId === targetTileId) return
+    
+    reorderTiles(draggedTileId, targetTileId)
+    setDraggedTileId(null)
+    setDragOverTileId(null)
+  }
+
   
   const currentTime = new Date().toLocaleTimeString([], { 
     hour: '2-digit', 
@@ -124,7 +99,8 @@ const Dashboard: React.FC = () => {
           {editMode && (
             <div 
               className="drag-handle mr-2 p-1 cursor-grab active:cursor-grabbing"
-              title="Drag to move"
+              title="Drag to reorder"
+              onMouseDown={(e) => e.stopPropagation()}
             >
               <GripVertical 
                 className="w-4 h-4 text-dark-text-secondary hover:text-dark-text transition-colors duration-200" 
@@ -273,35 +249,26 @@ const Dashboard: React.FC = () => {
     component: React.ReactNode,
     animationDelay?: string
   }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => {
-    // Only use saved positions in edit mode, let CSS grid handle normal mode
-    const position = editMode ? (tilePositions[tileId] || { x: 0, y: 0 }) : { x: 0, y: 0 }
-    const size = tileSizes[tileId] || { width: 400, height: 350 }
+    const isDraggedOver = dragOverTileId === tileId
+    const isDragging = draggedTileId === tileId
 
-    const TileContent = () => (
-      <Resizable
-        size={{ width: size.width, height: size.height }}
-        minWidth={250}
-        minHeight={200}
-        maxWidth={1200}
-        maxHeight={800}
-        enable={editMode ? {
-          top: true, right: true, bottom: true, left: true, 
-          topRight: true, bottomRight: true, bottomLeft: true, topLeft: true
-        } : false}
-        onResizeStop={(_, __, ref) => {
-          if (editMode) {
-            updateTileSize(tileId, ref.offsetWidth, ref.offsetHeight)
-          }
-        }}
+    return (
+      <div
+        draggable={editMode}
+        onDragStart={() => handleDragStart(tileId)}
+        onDragEnd={handleDragEnd}
+        onDragOver={(e) => handleDragOver(e, tileId)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, tileId)}
         className={`
-          ${getTileClass(tileId)} 
           glass-effect rounded-2xl p-6 animate-slide-up flex flex-col 
-          transition-all duration-300 group
-          ${editMode ? 'border-2 border-blue-400/30 shadow-lg' : ''}
+          transition-all duration-300 group h-full
+          ${editMode ? 'border-2 border-blue-400/30 shadow-lg cursor-move' : ''}
+          ${isDraggedOver && editMode ? 'border-green-400 bg-green-400/10' : ''}
+          ${isDragging ? 'opacity-50 scale-95' : ''}
           ${fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !w-full !h-full' : ''}
         `}
         style={{ animationDelay }}
-        handleWrapperClass={editMode ? "z-50" : "hidden"}
       >
         <TileHeader 
           tileId={tileId} 
@@ -321,25 +288,15 @@ const Dashboard: React.FC = () => {
             EDIT
           </div>
         )}
-      </Resizable>
-    )
-
-    if (editMode) {
-      return (
-        <Draggable
-          position={position}
-          onStop={(_, data) => updateTilePosition(tileId, data.x, data.y)}
-          handle=".drag-handle"
-          bounds="parent"
-        >
-          <div className="absolute">
-            <TileContent />
+        
+        {/* Drag overlay indicator */}
+        {isDraggedOver && editMode && (
+          <div className="absolute inset-0 border-2 border-dashed border-green-400 rounded-2xl bg-green-400/5 flex items-center justify-center">
+            <span className="text-green-400 font-medium">Drop here to reorder</span>
           </div>
-        </Draggable>
-      )
-    }
-
-    return <TileContent />
+        )}
+      </div>
+    )
   }
 
   if (fullscreenTile) {
@@ -413,7 +370,7 @@ const Dashboard: React.FC = () => {
         {editMode && (
           <div className="mb-4 p-3 bg-blue-500/10 border border-blue-400/30 rounded-lg">
             <p className="text-blue-400 text-sm font-medium text-center">
-              🎯 Edit Mode Active - Drag tiles by their handle, resize from corners, modify settings
+              🎯 Edit Mode Active - Drag tiles to reorder them in the grid, modify tile settings
             </p>
           </div>
         )}
@@ -426,19 +383,24 @@ const Dashboard: React.FC = () => {
         </p>
       </div>
 
-      {/* Dashboard Layout */}
+      {/* Dashboard Layout - Unified Grid System */}
       <div 
         ref={containerRef} 
-        className={`relative px-6 pb-20 ${editMode ? 'min-h-[800px]' : ''}`}
+        className="px-6 pb-20"
       >
-        {editMode ? (
-          // Edit Mode: Absolute positioning with drag and resize
-          <div className="relative">
-            {getSortedTiles().map((tile, index) => {
-              const animationDelay = `${index * 0.1}s`
-              return (
+        <div 
+          className="grid grid-cols-12 gap-6"
+          style={{ gridAutoRows: 'minmax(250px, auto)' }}
+        >
+          {getSortedTiles().map((tile, index) => {
+            const animationDelay = `${index * 0.1}s`
+            return (
+              <div 
+                key={tile.id}
+                ref={el => tileRefs.current[tile.id] = el}
+                className={getTileClass(tile.id)}
+              >
                 <TileComponent
-                  key={tile.id}
                   tileId={tile.id}
                   icon={getTileIcon(tile.type)}
                   title={tile.title}
@@ -446,36 +408,10 @@ const Dashboard: React.FC = () => {
                   component={renderTileContent(tile.type)}
                   animationDelay={animationDelay}
                 />
-              )
-            })}
-          </div>
-        ) : (
-          // Normal Mode: Grid layout
-          <div 
-            className="grid grid-cols-12 gap-6"
-            style={{ gridAutoRows: 'minmax(250px, auto)' }}
-          >
-            {getSortedTiles().map((tile, index) => {
-              const animationDelay = `${index * 0.1}s`
-              return (
-                <div 
-                  key={tile.id}
-                  ref={el => tileRefs.current[tile.id] = el}
-                  className={getTileClass(tile.id)}
-                >
-                  <TileComponent
-                    tileId={tile.id}
-                    icon={getTileIcon(tile.type)}
-                    title={tile.title}
-                    color={getTileColor(tile.type)}
-                    component={renderTileContent(tile.type)}
-                    animationDelay={animationDelay}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        )}
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Add Tile Modal */}
