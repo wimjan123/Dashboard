@@ -259,7 +259,7 @@ const WeatherWidget: React.FC = () => {
       </div>
 
       {!showSettings ? (
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className="flex-1 overflow-y-auto scrollbar-thin max-h-[80vh]">
           {/* Main Weather Display */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -457,7 +457,7 @@ const WeatherWidget: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className="flex-1 overflow-y-auto scrollbar-thin max-h-[80vh]">
           {/* Settings Panel */}
           <div className="space-y-4">
             {/* API Status & Configuration */}

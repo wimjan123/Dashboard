@@ -3,6 +3,7 @@ import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Exp
 import { lazy } from 'react'
 import { useDynamicTiles } from '../hooks/useDynamicTiles'
 import ThemeSelector from './ThemeSelector'
+import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DraggableStateSnapshot, DroppableProvided } from 'react-beautiful-dnd'
 
 const NewsFeeds = lazy(() => import('./NewsFeeds'))
 const WeatherWidget = lazy(() => import('./WeatherWidget'))
@@ -196,107 +197,58 @@ const Dashboard: React.FC = () => {
     return colorMap[tileType as keyof typeof colorMap] || 'text-gray-400'
   }
 
-  const TileComponent: React.FC<{ 
-    tileId: string, 
-    icon: React.ReactNode, 
-    title: string, 
-    color: string,
-    component: React.ReactNode,
-    animationDelay?: string
-  }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => {
-    const [isDragOver, setIsDragOver] = useState(false)
-    const [isDragging, setIsDragging] = useState(false)
-    
-    const handleTileDragStart = (e: React.DragEvent) => {
-      // Only allow drag from the grip handle or title area
-      const target = e.target as HTMLElement
-      const isFromControlZone = target.closest('.control-zone')
-      const isFromDragHandle = target.closest('.drag-handle') || target.closest('h2')
-      
-      if (isFromControlZone && !isFromDragHandle) {
-        e.preventDefault()
-        return
-      }
-      
-      setIsDragging(true)
-      handleDragStart(tileId)
-      e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', tileId)
-    }
-    
-    const handleTileDragEnd = () => {
-      setIsDragging(false)
-      handleDragEnd()
-    }
-    
+  interface TileComponentProps {
+    tileId: string;
+    icon: React.ReactNode;
+    title: string;
+    color: string;
+    component: React.ReactNode;
+    animationDelay?: string;
+    index: number;
+  }
+  const TileComponent: React.FC<TileComponentProps> = ({ tileId, icon, title, color, component, animationDelay = '0s', index }) => {
     return (
-      <div 
-        className={`
-          ${getTileClass(tileId)} 
-          glass-effect rounded-2xl p-6 animate-slide-up flex flex-col 
-          transition-all duration-300 relative group
-          ${draggedTile === tileId ? 'opacity-60 scale-[0.98] rotate-1' : 'hover-lift'}
-          ${isDragOver ? 'ring-2 ring-blue-400 ring-opacity-75 scale-105' : ''}
-          ${fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !col-span-12 !row-span-1 h-[calc(100vh-2rem)]' : ''}
-          ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
-        `}
-        style={{ animationDelay }}
-        draggable={!editMode}
-        onDragStart={handleTileDragStart}
-        onDragEnd={handleTileDragEnd}
-        onDragOver={(e) => {
-          e.preventDefault()
-          e.dataTransfer.dropEffect = 'move'
-        }}
-        onDragEnter={(e) => {
-          e.preventDefault()
-          if (draggedTile && draggedTile !== tileId) {
-            setIsDragOver(true)
-          }
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault()
-          const rect = e.currentTarget.getBoundingClientRect()
-          const x = e.clientX
-          const y = e.clientY
-          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-            setIsDragOver(false)
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault()
-          setIsDragOver(false)
-          const droppedTileId = e.dataTransfer.getData('text/plain')
-          if (droppedTileId && droppedTileId !== tileId) {
-            handleDrop(tileId)
-          }
-        }}
-      >
-        <TileHeader 
-          tileId={tileId} 
-          icon={icon} 
-          title={title} 
-          color={color} 
-        />
-        <div className="flex-1 overflow-hidden min-h-0">
-          {component}
-        </div>
-        
-        {/* Resize Handle */}
-        {!editMode && !fullscreenTile && (
-          <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <button
-              className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text cursor-nw-resize flex items-center space-x-1"
-              onClick={() => expandTile(tileId)}
-              title={`Resize tile (current: ${tiles.find(t => t.id === tileId)?.size || 'normal'})`}
-              draggable={false}
-            >
-              <Move className="w-3 h-3" />
-              <span className="text-xs capitalize">{tiles.find(t => t.id === tileId)?.size}</span>
-            </button>
+      <Draggable draggableId={tileId} index={index}>
+        {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            className={`
+              ${getTileClass(tileId)} 
+              glass-effect rounded-2xl p-6 animate-slide-up flex flex-col 
+              transition-all duration-300 relative group
+              ${snapshot.isDragging ? 'opacity-60 scale-[0.98] rotate-1 cursor-grabbing' : 'hover-lift cursor-grab'}
+              ${fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !col-span-12 !row-span-1 h-[calc(100vh-2rem)]' : ''}
+            `}
+            style={{ animationDelay }}
+          >
+            <TileHeader 
+              tileId={tileId} 
+              icon={icon} 
+              title={title} 
+              color={color} 
+            />
+            <div className="flex-1 overflow-hidden min-h-0">
+              {component}
+            </div>
+            {/* Resize Handle */}
+            {!editMode && !fullscreenTile && (
+              <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <button
+                  className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text cursor-nw-resize flex items-center space-x-1"
+                  onClick={() => expandTile(tileId)}
+                  title={`Resize tile (current: ${tiles.find(t => t.id === tileId)?.size || 'normal'})`}
+                  draggable={false}
+                >
+                  <Move className="w-3 h-3" />
+                  <span className="text-xs capitalize">{tiles.find(t => t.id === tileId)?.size}</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </Draggable>
     )
   }
 
@@ -310,9 +262,20 @@ const Dashboard: React.FC = () => {
           title={fullscreenTile.title}
           color={getTileColor(fullscreenTile.type)}
           component={renderTileContent(fullscreenTile.type)}
+          index={0}
         />
       </div>
     )
+  }
+
+  // Drag and drop reorder handler
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return
+    const from = result.source.index
+    const to = result.destination.index
+    if (from !== to) {
+      handleDrop(getSortedTiles()[to].id)
+    }
   }
 
   return (
@@ -368,36 +331,47 @@ const Dashboard: React.FC = () => {
         </p>
       </div>
 
-      {/* Scrollable Dashboard Grid */}
-      <div className={`grid grid-cols-12 gap-6 px-6 pb-20 ${editMode ? 'relative' : ''}`} style={{ gridAutoRows: 'minmax(300px, auto)' }}>
-        {editMode && (
-          <div className="absolute inset-0 pointer-events-none" style={{ zIndex: -1 }}>
-            {Array.from({ length: 12 }, (_, i) => (
-              <div
-                key={i}
-                className="absolute top-0 bottom-0 border-l border-dashed border-blue-400/20"
-                style={{ left: `${(i * 100) / 12}%` }}
-              />
-            ))}
-          </div>
-        )}
-        
-        {getSortedTiles().map((tile, index) => {
-          const animationDelay = `${index * 0.1}s`
-          
-          return (
-            <TileComponent
-              key={tile.id}
-              tileId={tile.id}
-              icon={getTileIcon(tile.type)}
-              title={tile.title}
-              color={getTileColor(tile.type)}
-              component={renderTileContent(tile.type)}
-              animationDelay={animationDelay}
-            />
-          )
-        })}
-      </div>
+      {/* Scrollable Dashboard Grid with DragDropContext */}
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="dashboard-droppable" direction="horizontal">
+          {(provided: DroppableProvided) => (
+            <div
+              className={`grid grid-cols-12 gap-6 px-6 pb-20 ${editMode ? 'relative' : ''}`}
+              style={{ gridAutoRows: 'minmax(300px, auto)' }}
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+            >
+              {editMode && (
+                <div className="absolute inset-0 pointer-events-none" style={{ zIndex: -1 }}>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <div
+                      key={i}
+                      className="absolute top-0 bottom-0 border-l border-dashed border-blue-400/20"
+                      style={{ left: `${(i * 100) / 12}%` }}
+                    />
+                  ))}
+                </div>
+              )}
+              {getSortedTiles().map((tile, index) => {
+                const animationDelay = `${index * 0.1}s`
+                return (
+                  <TileComponent
+                    key={tile.id}
+                    tileId={tile.id}
+                    icon={getTileIcon(tile.type)}
+                    title={tile.title}
+                    color={getTileColor(tile.type)}
+                    component={renderTileContent(tile.type)}
+                    animationDelay={animationDelay}
+                    index={index}
+                  />
+                )
+              })}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
 
       {/* Add Tile Modal */}
       <AddTileModal
