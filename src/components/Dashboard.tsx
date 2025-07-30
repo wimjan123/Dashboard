@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from 'react'
+import React, { useState, Suspense, useRef, useLayoutEffect } from 'react'
 import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X, Move, Save } from 'lucide-react'
 import { lazy } from 'react'
 import { useDynamicTiles } from '../hooks/useDynamicTiles'
@@ -63,6 +63,40 @@ const Dashboard: React.FC = () => {
   }
 
   const [showAddTile, setShowAddTile] = useState(false)
+  const tileRefs = useRef<{ [id: string]: HTMLDivElement | null }>({})
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // Calculate actual positions of tiles from their current DOM layout
+  const calculateTilePositions = () => {
+    if (!containerRef.current) return
+    
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const newPositions: { [id: string]: { x: number; y: number } } = {}
+    
+    getSortedTiles().forEach(tile => {
+      const tileElement = tileRefs.current[tile.id]
+      if (tileElement) {
+        const tileRect = tileElement.getBoundingClientRect()
+        newPositions[tile.id] = {
+          x: tileRect.left - containerRect.left,
+          y: tileRect.top - containerRect.top
+        }
+      }
+    })
+    
+    setTilePositions(positions => {
+      const updated = { ...positions, ...newPositions }
+      localStorage.setItem('dashboard-tile-positions', JSON.stringify(updated))
+      return updated
+    })
+  }
+
+  // When entering edit mode, capture current positions to prevent jumping
+  useLayoutEffect(() => {
+    if (editMode) {
+      calculateTilePositions()
+    }
+  }, [editMode])
   
   const currentTime = new Date().toLocaleTimeString([], { 
     hour: '2-digit', 
@@ -239,7 +273,8 @@ const Dashboard: React.FC = () => {
     component: React.ReactNode,
     animationDelay?: string
   }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => {
-    const position = tilePositions[tileId] || { x: 0, y: 0 }
+    // Only use saved positions in edit mode, let CSS grid handle normal mode
+    const position = editMode ? (tilePositions[tileId] || { x: 0, y: 0 }) : { x: 0, y: 0 }
     const size = tileSizes[tileId] || { width: 400, height: 350 }
 
     const TileContent = () => (
@@ -392,7 +427,10 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Dashboard Layout */}
-      <div className={`relative px-6 pb-20 ${editMode ? 'min-h-[800px]' : ''}`}>
+      <div 
+        ref={containerRef} 
+        className={`relative px-6 pb-20 ${editMode ? 'min-h-[800px]' : ''}`}
+      >
         {editMode ? (
           // Edit Mode: Absolute positioning with drag and resize
           <div className="relative">
@@ -422,6 +460,7 @@ const Dashboard: React.FC = () => {
               return (
                 <div 
                   key={tile.id}
+                  ref={el => tileRefs.current[tile.id] = el}
                   className={getTileClass(tile.id)}
                 >
                   <TileComponent
