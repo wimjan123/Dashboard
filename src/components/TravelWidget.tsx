@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { MapPin, Navigation, Clock, Car, Train, Bike, Users, AlertCircle, Loader, RefreshCw, Star, BookmarkPlus, Bookmark } from 'lucide-react'
+import { MapPin, Navigation, Clock, Car, Train, Bike, Users, AlertCircle, Loader, RefreshCw, Star, BookmarkPlus, Bookmark, ArrowUpDown, Home, Building2 } from 'lucide-react'
 
 interface Location {
   lat: number
@@ -25,14 +25,18 @@ interface SavedDestination {
 
 const TravelWidget: React.FC = () => {
   const [currentLocation, setCurrentLocation] = useState<Location | null>(null)
+  const [departure, setDeparture] = useState('')
+  const [departureLocation, setDepartureLocation] = useState<Location | null>(null)
   const [destination, setDestination] = useState('')
   const [destinationLocation, setDestinationLocation] = useState<Location | null>(null)
+  const [useCurrentLocation, setUseCurrentLocation] = useState(true)
   const [routes, setRoutes] = useState<Route[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [selectedMode, setSelectedMode] = useState<'driving' | 'walking' | 'transit' | 'bicycling'>('driving')
   const [savedDestinations, setSavedDestinations] = useState<SavedDestination[]>([])
+  const [savedDepartures, setSavedDepartures] = useState<SavedDestination[]>([])
   const [showSaved, setShowSaved] = useState(false)
 
   const modes = [
@@ -42,11 +46,16 @@ const TravelWidget: React.FC = () => {
     { id: 'bicycling' as const, name: 'Bike', icon: Bike, color: 'text-orange-400' }
   ]
 
-  // Load saved destinations on mount
+  // Load saved destinations and departures on mount
   useEffect(() => {
-    const saved = localStorage.getItem('dashboard-saved-destinations')
-    if (saved) {
-      setSavedDestinations(JSON.parse(saved))
+    const savedDest = localStorage.getItem('dashboard-saved-destinations')
+    if (savedDest) {
+      setSavedDestinations(JSON.parse(savedDest))
+    }
+    
+    const savedDep = localStorage.getItem('dashboard-saved-departures')
+    if (savedDep) {
+      setSavedDepartures(JSON.parse(savedDep))
     }
   }, [])
 
@@ -130,8 +139,10 @@ const TravelWidget: React.FC = () => {
   }
 
   const calculateRoute = async () => {
-    if (!currentLocation || !destination.trim()) {
-      setError('Current location and destination are required')
+    const originLocation = useCurrentLocation ? currentLocation : departureLocation
+    
+    if (!originLocation || !destination.trim()) {
+      setError('Departure location and destination are required')
       return
     }
 
@@ -139,6 +150,13 @@ const TravelWidget: React.FC = () => {
     setError(null)
 
     try {
+      // Geocode departure if needed (and not using current location)
+      let departLocation = originLocation
+      if (!useCurrentLocation && !departureLocation && departure.trim()) {
+        departLocation = await geocodeAddress(departure)
+        setDepartureLocation(departLocation)
+      }
+
       // Geocode destination if needed
       let destLocation = destinationLocation
       if (!destLocation) {
@@ -147,7 +165,7 @@ const TravelWidget: React.FC = () => {
       }
 
       // Calculate routes for different modes
-      const routePromises = modes.map(mode => calculateRouteForMode(currentLocation, destLocation!, mode.id))
+      const routePromises = modes.map(mode => calculateRouteForMode(departLocation!, destLocation!, mode.id))
       const routeResults = await Promise.allSettled(routePromises)
       
       const validRoutes: Route[] = []
@@ -228,17 +246,58 @@ const TravelWidget: React.FC = () => {
     localStorage.setItem('dashboard-saved-destinations', JSON.stringify(updated))
   }
 
-  const toggleFavorite = (id: string) => {
-    const updated = savedDestinations.map(dest =>
-      dest.id === id ? { ...dest, isFavorite: !dest.isFavorite } : dest
-    )
-    setSavedDestinations(updated)
-    localStorage.setItem('dashboard-saved-destinations', JSON.stringify(updated))
+  const saveDeparture = () => {
+    if (!departure.trim() || !departureLocation) return
+
+    const newDeparture: SavedDestination = {
+      id: Date.now().toString(),
+      name: departure.trim(),
+      address: departure.trim(),
+      location: departureLocation,
+      isFavorite: false
+    }
+
+    const updated = [...savedDepartures, newDeparture]
+    setSavedDepartures(updated)
+    localStorage.setItem('dashboard-saved-departures', JSON.stringify(updated))
+  }
+
+  const swapLocations = () => {
+    const tempDeparture = departure
+    const tempDepartureLocation = departureLocation
+    
+    setDeparture(destination)
+    setDepartureLocation(destinationLocation)
+    setDestination(tempDeparture)
+    setDestinationLocation(tempDepartureLocation)
+  }
+
+  const toggleFavorite = (id: string, type: 'destination' | 'departure') => {
+    if (type === 'destination') {
+      const updated = savedDestinations.map(dest =>
+        dest.id === id ? { ...dest, isFavorite: !dest.isFavorite } : dest
+      )
+      setSavedDestinations(updated)
+      localStorage.setItem('dashboard-saved-destinations', JSON.stringify(updated))
+    } else {
+      const updated = savedDepartures.map(dept =>
+        dept.id === id ? { ...dept, isFavorite: !dept.isFavorite } : dept
+      )
+      setSavedDepartures(updated)
+      localStorage.setItem('dashboard-saved-departures', JSON.stringify(updated))
+    }
   }
 
   const loadSavedDestination = (savedDest: SavedDestination) => {
     setDestination(savedDest.address)
     setDestinationLocation(savedDest.location)
+    setShowSaved(false)
+  }
+  
+  const loadSavedDeparture = (savedDep: SavedDestination) => {
+    setDeparture(savedDep.address)
+    setDepartureLocation(savedDep.location)
+    setUseCurrentLocation(false)
     setShowSaved(false)
   }
 
@@ -247,44 +306,105 @@ const TravelWidget: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Current Location */}
+      {/* Departure Location */}
       <div className="mb-4 p-3 bg-dark-card rounded-lg border border-dark-border">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center space-x-2">
             <MapPin className="w-4 h-4 text-green-400" />
-            <span className="text-sm font-medium text-dark-text">Current Location</span>
+            <span className="text-sm font-medium text-dark-text">Departure</span>
           </div>
-          <button
-            onClick={getCurrentLocation}
-            className="p-1 rounded hover:bg-dark-border transition-colors duration-200"
-            title="Refresh location"
-          >
-            <RefreshCw className="w-3 h-3 text-dark-text-secondary" />
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={getCurrentLocation}
+              className="p-1 rounded hover:bg-dark-border transition-colors duration-200"
+              title="Refresh current location"
+            >
+              <RefreshCw className="w-3 h-3 text-dark-text-secondary" />
+            </button>
+            {!useCurrentLocation && departure.trim() && departureLocation && (
+              <button
+                onClick={saveDeparture}
+                className="p-1 bg-green-500 hover:bg-green-600 rounded transition-colors duration-200"
+                title="Save departure location"
+              >
+                <BookmarkPlus className="w-3 h-3 text-white" />
+              </button>
+            )}
+          </div>
         </div>
         
-        {locationError ? (
-          <div className="flex items-center space-x-2 text-red-400 text-sm">
-            <AlertCircle className="w-3 h-3" />
-            <span>{locationError}</span>
-          </div>
-        ) : currentLocation ? (
-          <p className="text-xs text-dark-text-secondary truncate">
-            {currentLocation.address || `${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`}
-          </p>
-        ) : (
-          <div className="flex items-center space-x-2 text-dark-text-secondary text-sm">
-            <Loader className="w-3 h-3 animate-spin" />
-            <span>Getting location...</span>
-          </div>
-        )}
+        <div className="space-y-2">
+          {/* Use Current Location Toggle */}
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useCurrentLocation}
+              onChange={(e) => {
+                setUseCurrentLocation(e.target.checked)
+                if (e.target.checked) {
+                  setDeparture('')
+                  setDepartureLocation(null)
+                }
+              }}
+              className="w-4 h-4 text-blue-400 bg-dark-bg border-dark-border rounded focus:ring-blue-400 focus:ring-2"
+            />
+            <span className="text-sm text-dark-text">Use current location</span>
+          </label>
+          
+          {useCurrentLocation ? (
+            locationError ? (
+              <div className="flex items-center space-x-2 text-red-400 text-sm">
+                <AlertCircle className="w-3 h-3" />
+                <span>{locationError}</span>
+              </div>
+            ) : currentLocation ? (
+              <p className="text-xs text-dark-text-secondary truncate pl-6">
+                {currentLocation.address || `${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`}
+              </p>
+            ) : (
+              <div className="flex items-center space-x-2 text-dark-text-secondary text-sm pl-6">
+                <Loader className="w-3 h-3 animate-spin" />
+                <span>Getting location...</span>
+              </div>
+            )
+          ) : (
+            <div className="relative">
+              <input
+                type="text"
+                value={departure}
+                onChange={(e) => {
+                  setDeparture(e.target.value)
+                  setDepartureLocation(null)
+                }}
+                placeholder="Enter departure location..."
+                className="w-full pl-3 pr-4 py-2 bg-dark-bg border border-dark-border rounded text-dark-text placeholder-dark-text-secondary focus:outline-none focus:border-blue-400 transition-colors duration-200 text-sm"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Swap Button */}
+      <div className="mb-4 flex justify-center">
+        <button
+          onClick={swapLocations}
+          disabled={useCurrentLocation || !departure.trim() || !destination.trim()}
+          className="p-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:opacity-50 rounded-lg transition-colors duration-200"
+          title="Swap departure and destination"
+        >
+          <ArrowUpDown className="w-4 h-4 text-white" />
+        </button>
       </div>
 
       {/* Destination Input */}
       <div className="mb-4">
+        <div className="mb-2 flex items-center space-x-2">
+          <Navigation className="w-4 h-4 text-orange-400" />
+          <span className="text-sm font-medium text-dark-text">Destination</span>
+        </div>
+        
         <div className="flex space-x-2">
           <div className="flex-1 relative">
-            <Navigation className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-dark-text-secondary" />
             <input
               type="text"
               value={destination}
@@ -293,14 +413,14 @@ const TravelWidget: React.FC = () => {
                 setDestinationLocation(null)
               }}
               placeholder="Enter destination..."
-              className="w-full pl-10 pr-4 py-2 bg-dark-card border border-dark-border rounded-lg text-dark-text placeholder-dark-text-secondary focus:outline-none focus:border-blue-400 transition-colors duration-200"
+              className="w-full pl-3 pr-4 py-2 bg-dark-card border border-dark-border rounded-lg text-dark-text placeholder-dark-text-secondary focus:outline-none focus:border-blue-400 transition-colors duration-200"
               onKeyPress={(e) => e.key === 'Enter' && calculateRoute()}
             />
           </div>
           <button
             onClick={() => setShowSaved(!showSaved)}
             className="p-2 bg-dark-card border border-dark-border rounded-lg hover:bg-opacity-80 transition-colors duration-200"
-            title="Saved destinations"
+            title="Saved locations"
           >
             <Bookmark className="w-4 h-4 text-dark-text-secondary" />
           </button>
@@ -331,27 +451,68 @@ const TravelWidget: React.FC = () => {
           </div>
         )}
 
-        {/* Saved Destinations */}
-        {showSaved && savedDestinations.length > 0 && (
-          <div className="mt-2 max-h-32 overflow-y-auto scrollbar-thin bg-dark-card border border-dark-border rounded-lg">
-            {savedDestinations.map(dest => (
-              <div
-                key={dest.id}
-                onClick={() => loadSavedDestination(dest)}
-                className="flex items-center justify-between p-2 hover:bg-dark-bg cursor-pointer transition-colors duration-200"
-              >
-                <span className="text-sm text-dark-text truncate">{dest.name}</span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleFavorite(dest.id)
-                  }}
-                  className="p-1 rounded hover:bg-dark-border transition-colors duration-200"
-                >
-                  <Star className={`w-3 h-3 ${dest.isFavorite ? 'text-yellow-400 fill-current' : 'text-dark-text-secondary'}`} />
-                </button>
+        {/* Saved Locations */}
+        {showSaved && (savedDestinations.length > 0 || savedDepartures.length > 0) && (
+          <div className="mt-2 max-h-40 overflow-y-auto scrollbar-thin bg-dark-card border border-dark-border rounded-lg">
+            {/* Saved Departures */}
+            {savedDepartures.length > 0 && (
+              <div>
+                <div className="px-2 py-1 bg-dark-bg border-b border-dark-border">
+                  <div className="flex items-center space-x-1 text-xs text-dark-text-secondary">
+                    <Home className="w-3 h-3" />
+                    <span>Departure Locations</span>
+                  </div>
+                </div>
+                {savedDepartures.map(dept => (
+                  <div
+                    key={dept.id}
+                    onClick={() => loadSavedDeparture(dept)}
+                    className="flex items-center justify-between p-2 hover:bg-dark-bg cursor-pointer transition-colors duration-200"
+                  >
+                    <span className="text-sm text-dark-text truncate">{dept.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleFavorite(dept.id, 'departure')
+                      }}
+                      className="p-1 rounded hover:bg-dark-border transition-colors duration-200"
+                    >
+                      <Star className={`w-3 h-3 ${dept.isFavorite ? 'text-yellow-400 fill-current' : 'text-dark-text-secondary'}`} />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+            
+            {/* Saved Destinations */}
+            {savedDestinations.length > 0 && (
+              <div>
+                <div className="px-2 py-1 bg-dark-bg border-b border-dark-border">
+                  <div className="flex items-center space-x-1 text-xs text-dark-text-secondary">
+                    <Building2 className="w-3 h-3" />
+                    <span>Destinations</span>
+                  </div>
+                </div>
+                {savedDestinations.map(dest => (
+                  <div
+                    key={dest.id}
+                    onClick={() => loadSavedDestination(dest)}
+                    className="flex items-center justify-between p-2 hover:bg-dark-bg cursor-pointer transition-colors duration-200"
+                  >
+                    <span className="text-sm text-dark-text truncate">{dest.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleFavorite(dest.id, 'destination')
+                      }}
+                      className="p-1 rounded hover:bg-dark-border transition-colors duration-200"
+                    >
+                      <Star className={`w-3 h-3 ${dest.isFavorite ? 'text-yellow-400 fill-current' : 'text-dark-text-secondary'}`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -359,7 +520,7 @@ const TravelWidget: React.FC = () => {
       {/* Calculate Button */}
       <button
         onClick={calculateRoute}
-        disabled={!currentLocation || !destination.trim() || loading}
+        disabled={(!useCurrentLocation && !departureLocation) || (!useCurrentLocation && !departure.trim()) || (useCurrentLocation && !currentLocation) || !destination.trim() || loading}
         className="w-full mb-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:opacity-50 rounded-lg text-white font-medium transition-colors duration-200"
       >
         {loading ? (
@@ -437,8 +598,9 @@ const TravelWidget: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => {
-                    if (currentLocation && destinationLocation) {
-                      const url = `https://www.google.com/maps/dir/${currentLocation.lat},${currentLocation.lng}/${destinationLocation.lat},${destinationLocation.lng}`
+                    const originLocation = useCurrentLocation ? currentLocation : departureLocation
+                    if (originLocation && destinationLocation) {
+                      const url = `https://www.google.com/maps/dir/${originLocation.lat},${originLocation.lng}/${destinationLocation.lat},${destinationLocation.lng}`
                       window.open(url, '_blank')
                     }
                   }}

@@ -403,7 +403,7 @@ const NewsFeeds: React.FC = () => {
       )}
 
       {/* News List */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin space-y-4">
+      <div className="flex-1 overflow-y-auto scrollbar-thin space-y-4 max-h-96">
         {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
@@ -423,13 +423,13 @@ const NewsFeeds: React.FC = () => {
               onClick={() => item.url !== '#' && window.open(item.url, '_blank')}
             >
               <div className="flex items-start justify-between mb-1">
-                <h3 className="font-semibold text-dark-text group-hover:text-blue-400 transition-colors duration-200 leading-tight text-sm line-clamp-2">
+                <h3 className="font-semibold text-dark-text group-hover:text-blue-400 transition-colors duration-200 leading-tight text-sm line-clamp-2 pr-2">
                   {item.title}
                 </h3>
-                <ExternalLink className="w-3 h-3 text-dark-text-secondary group-hover:text-blue-400 transition-colors duration-200 ml-2 flex-shrink-0 mt-0.5" />
+                <ExternalLink className="w-3 h-3 text-dark-text-secondary group-hover:text-blue-400 transition-colors duration-200 flex-shrink-0 mt-0.5" />
               </div>
               
-              <p className="text-dark-text-secondary text-xs mb-2 leading-tight line-clamp-2">
+              <p className="text-dark-text-secondary text-xs mb-2 leading-tight line-clamp-3 break-words">
                 {item.description}
               </p>
               

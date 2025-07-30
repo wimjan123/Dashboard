@@ -1,5 +1,5 @@
 import React, { useState, Suspense } from 'react'
-import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X } from 'lucide-react'
+import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X, Move } from 'lucide-react'
 import { lazy } from 'react'
 import { useDynamicTiles } from '../hooks/useDynamicTiles'
 
@@ -64,7 +64,11 @@ const Dashboard: React.FC = () => {
           <button
             className="mr-2 p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text cursor-grab active:cursor-grabbing"
             draggable
-            onDragStart={() => handleDragStart(tileId)}
+            onDragStart={(e) => {
+              handleDragStart(tileId)
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', tileId)
+            }}
             onDragEnd={handleDragEnd}
             title="Drag to rearrange"
           >
@@ -206,14 +210,32 @@ const Dashboard: React.FC = () => {
     animationDelay?: string
   }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => (
     <div 
-      className={`${getTileClass(tileId)} glass-effect rounded-2xl p-6 hover-lift animate-slide-up flex flex-col transition-all duration-300 ${
-        draggedTile === tileId ? 'opacity-50 scale-95' : ''
+      className={`${getTileClass(tileId)} glass-effect rounded-2xl p-6 hover-lift animate-slide-up flex flex-col transition-all duration-300 relative group ${
+        draggedTile === tileId ? 'opacity-30 scale-95 rotate-2' : ''
       } ${
         fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !col-span-12 !row-span-1 h-[calc(100vh-2rem)]' : ''
       }`}
       style={{ animationDelay }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={() => handleDrop(tileId)}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }}
+      onDragEnter={(e) => {
+        e.preventDefault()
+        if (draggedTile && draggedTile !== tileId) {
+          e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'ring-opacity-50')
+        }
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault()
+        e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-50')
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-50')
+        const droppedTileId = e.dataTransfer.getData('text/plain')
+        if (droppedTileId) handleDrop(tileId)
+      }}
     >
       <TileHeader 
         tileId={tileId} 
@@ -221,9 +243,23 @@ const Dashboard: React.FC = () => {
         title={title} 
         color={color} 
       />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         {component}
       </div>
+      
+      {/* Resize Handle */}
+      {!editMode && !fullscreenTile && (
+        <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button
+            className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text cursor-nw-resize flex items-center space-x-1"
+            onClick={() => expandTile(tileId)}
+            title={`Resize tile (current: ${tiles.find(t => t.id === tileId)?.size || 'normal'})`}
+          >
+            <Move className="w-3 h-3" />
+            <span className="text-xs capitalize">{tiles.find(t => t.id === tileId)?.size}</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 
