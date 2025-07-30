@@ -3,11 +3,17 @@ import { Sun, Cloud, CloudRain, Wind, Droplets, Thermometer, Settings, MapPin, S
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { 
   fetchWeatherData, 
+  fetchWeatherForecast,
+  fetchHourlyForecast,
+  fetchWeatherAlerts,
   searchLocations as apiSearchLocations, 
   getCurrentLocation as getGeoLocation,
   setApiKey,
   isWeatherApiConfigured,
   WeatherData,
+  WeatherForecast,
+  HourlyForecast,
+  WeatherAlert,
   LocationData
 } from '../utils/weatherApi'
 
@@ -22,9 +28,13 @@ interface SavedLocation {
 
 const WeatherWidget: React.FC = () => {
   const [weather, setWeather] = useState<WeatherData | null>(null)
+  const [forecast, setForecast] = useState<WeatherForecast[]>([])
+  const [hourlyForecast, setHourlyForecast] = useState<HourlyForecast[]>([])
+  const [alerts, setAlerts] = useState<WeatherAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showExtended, setShowExtended] = useLocalStorage<boolean>('weather-show-extended', true)
   const [savedLocations, setSavedLocations] = useLocalStorage<SavedLocation[]>('weather-locations', [])
   const [currentLocationId, setCurrentLocationId] = useLocalStorage<string>('weather-current-location', 'default')
   const [searchQuery, setSearchQuery] = useState('')
@@ -52,8 +62,27 @@ const WeatherWidget: React.FC = () => {
     
     try {
       const location = getCurrentLocationData()
+      
+      // Load current weather
       const weatherData = await fetchWeatherData(location.lat, location.lon, useMetric)
       setWeather(weatherData)
+      
+      // Load extended data if enabled
+      if (showExtended) {
+        try {
+          const [forecastData, hourlyData, alertData] = await Promise.all([
+            fetchWeatherForecast(location.lat, location.lon, useMetric).catch(() => []),
+            fetchHourlyForecast(location.lat, location.lon, useMetric).catch(() => []),
+            fetchWeatherAlerts(location.lat, location.lon).catch(() => [])
+          ])
+          
+          setForecast(forecastData)
+          setHourlyForecast(hourlyData.slice(0, 8)) // Show next 8 hours
+          setAlerts(alertData)
+        } catch (extendedError) {
+          console.warn('Extended weather data failed:', extendedError)
+        }
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load weather data'
       setError(errorMessage)
@@ -104,7 +133,7 @@ const WeatherWidget: React.FC = () => {
 
   useEffect(() => {
     loadWeather()
-  }, [currentLocationId, useMetric])
+  }, [currentLocationId, useMetric, showExtended])
 
   const searchLocations = async (query: string) => {
     if (query.length < 2) {
@@ -156,26 +185,37 @@ const WeatherWidget: React.FC = () => {
     setShowSettings(false)
   }
 
-  const getWeatherIcon = (condition: string, iconCode?: string) => {
+  const getWeatherIcon = (condition: string, iconCode?: string, size: 'sm' | 'lg' = 'lg') => {
+    const sizeClass = size === 'sm' ? 'w-6 h-6' : 'w-12 h-12'
+    
     // If we have an actual weather icon URL from the API, use it
     if (iconCode && iconCode.startsWith('http')) {
-      return <img src={iconCode} alt={condition} className="w-12 h-12" />
+      return <img src={iconCode} alt={condition} className={sizeClass} />
     }
     
     // Otherwise use Lucide icons based on condition
     const conditionLower = condition.toLowerCase()
     if (conditionLower.includes('sun') || conditionLower.includes('clear')) {
-      return <Sun className="w-12 h-12 text-yellow-400 animate-pulse-soft" />
+      return <Sun className={`${sizeClass} text-yellow-400 animate-pulse-soft`} />
     } else if (conditionLower.includes('cloud') && !conditionLower.includes('rain')) {
-      return <Cloud className="w-12 h-12 text-blue-300 animate-pulse-soft" />
+      return <Cloud className={`${sizeClass} text-blue-300 animate-pulse-soft`} />
     } else if (conditionLower.includes('rain') || conditionLower.includes('drizzle') || conditionLower.includes('shower')) {
-      return <CloudRain className="w-12 h-12 text-blue-500 animate-pulse-soft" />
+      return <CloudRain className={`${sizeClass} text-blue-500 animate-pulse-soft`} />
     } else if (conditionLower.includes('snow')) {
-      return <Cloud className="w-12 h-12 text-white animate-pulse-soft" />
+      return <Cloud className={`${sizeClass} text-white animate-pulse-soft`} />
     } else if (conditionLower.includes('wind')) {
-      return <Wind className="w-12 h-12 text-green-400 animate-pulse-soft" />
+      return <Wind className={`${sizeClass} text-green-400 animate-pulse-soft`} />
     } else {
-      return <Sun className="w-12 h-12 text-yellow-400 animate-pulse-soft" />
+      return <Sun className={`${sizeClass} text-yellow-400 animate-pulse-soft`} />
+    }
+  }
+
+  const getAlertSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'extreme': return 'text-red-500 bg-red-500'
+      case 'severe': return 'text-orange-500 bg-orange-500'
+      case 'moderate': return 'text-yellow-500 bg-yellow-500'
+      default: return 'text-blue-500 bg-blue-500'
     }
   }
 
@@ -192,7 +232,7 @@ const WeatherWidget: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       {/* Header with Settings */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div className="flex items-center space-x-2 flex-1 min-w-0">
           <MapPin className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <span className="text-sm text-dark-text truncate">{weather.location}</span>
@@ -219,7 +259,7 @@ const WeatherWidget: React.FC = () => {
       </div>
 
       {!showSettings ? (
-        <>
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
           {/* Main Weather Display */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -240,7 +280,7 @@ const WeatherWidget: React.FC = () => {
           </div>
 
           {/* Weather Details */}
-          <div className="space-y-3">
+          <div className="space-y-3 mb-4">
             <div className="flex items-center justify-between p-3 rounded-lg bg-dark-card">
               <div className="flex items-center">
                 <Droplets className="w-4 h-4 text-blue-400 mr-2" />
@@ -317,9 +357,107 @@ const WeatherWidget: React.FC = () => {
               </div>
             )}
           </div>
-        </>
+
+          {/* Weather Alerts */}
+          {alerts.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <h4 className="text-sm font-medium text-dark-text flex items-center">
+                <span className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>
+                Weather Alerts
+              </h4>
+              {alerts.map((alert) => (
+                <div key={alert.id} className="p-3 rounded-lg bg-dark-card border-l-4 border-red-500">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className={`text-sm font-medium ${getAlertSeverityColor(alert.severity).replace('bg-', 'text-')}`}>
+                        {alert.title}
+                      </div>
+                      <div className="text-xs text-dark-text-secondary mt-1 line-clamp-2">
+                        {alert.description}
+                      </div>
+                      {alert.areas.length > 0 && (
+                        <div className="text-xs text-dark-text-secondary mt-1">
+                          Areas: {alert.areas.slice(0, 2).join(', ')}
+                          {alert.areas.length > 2 && ` +${alert.areas.length - 2} more`}
+                        </div>
+                      )}
+                    </div>
+                    <div className={`w-2 h-2 rounded-full ${getAlertSeverityColor(alert.severity).split(' ')[1]} bg-opacity-80 flex-shrink-0 mt-1`}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Extended Weather Data Toggle */}
+          {showExtended && (
+            <>
+              {/* Hourly Forecast */}
+              {hourlyForecast.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium text-dark-text mb-3">Next 8 Hours</h4>
+                  <div className="grid grid-cols-4 gap-2">
+                    {hourlyForecast.map((hour, index) => (
+                      <div key={index} className="p-2 rounded-lg bg-dark-card text-center">
+                        <div className="text-xs text-dark-text-secondary mb-1">{hour.hour}</div>
+                        <div className="flex justify-center mb-1">
+                          {getWeatherIcon(hour.condition, hour.icon, 'sm')}
+                        </div>
+                        <div className="text-sm font-medium text-dark-text">
+                          {hour.temperature}°
+                        </div>
+                        {hour.precipitationChance > 0 && (
+                          <div className="text-xs text-blue-400 mt-1">
+                            {hour.precipitationChance}%
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 5-Day Forecast */}
+              {forecast.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium text-dark-text mb-3">5-Day Forecast</h4>
+                  <div className="space-y-2">
+                    {forecast.map((day, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-dark-card">
+                        <div className="flex items-center space-x-3">
+                          <div className="text-sm text-dark-text w-16">
+                            {index === 0 ? 'Today' : new Date(day.date).toLocaleDateString('en', { weekday: 'short' })}
+                          </div>
+                          <div className="flex justify-center w-8">
+                            {getWeatherIcon(day.condition, day.icon, 'sm')}
+                          </div>
+                          <div className="text-xs text-dark-text-secondary flex-1">
+                            {day.condition}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {day.precipitationChance > 0 && (
+                            <div className="text-xs text-blue-400">
+                              {day.precipitationChance}%
+                            </div>
+                          )}
+                          <div className="text-sm text-dark-text-secondary">
+                            {day.low}°
+                          </div>
+                          <div className="text-sm font-medium text-dark-text">
+                            {day.high}°
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       ) : (
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
           {/* Settings Panel */}
           <div className="space-y-4">
             {/* API Status & Configuration */}
@@ -405,6 +543,26 @@ const WeatherWidget: React.FC = () => {
                     °F
                   </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Extended Features Toggle */}
+            <div className="p-3 rounded-lg bg-dark-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm text-dark-text">Extended Weather</span>
+                  <div className="text-xs text-dark-text-secondary">Hourly forecast, alerts, and 5-day outlook</div>
+                </div>
+                <button
+                  onClick={() => setShowExtended(!showExtended)}
+                  className={`w-12 h-6 rounded-full transition-colors duration-200 relative ${
+                    showExtended ? 'bg-sky-500' : 'bg-dark-border'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform duration-200 ${
+                    showExtended ? 'translate-x-7' : 'translate-x-1'
+                  }`}></div>
+                </button>
               </div>
             </div>
 

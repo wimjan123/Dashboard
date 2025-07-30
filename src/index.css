@@ -12,6 +12,17 @@
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
   color-scheme: dark;
+  
+  /* Theme CSS Variables - defaults to dark theme */
+  --color-background: #0d1117;
+  --color-card: #161b22;
+  --color-border: #30363d;
+  --color-text: #f0f6fc;
+  --color-text-secondary: #8b949e;
+  --color-accent: #3b82f6;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
 }
 
 * {
@@ -21,8 +32,8 @@
 }
 
 body {
-  background: #0d1117;
-  color: #f0f6fc;
+  background: var(--color-background);
+  color: var(--color-text);
 }
 
 #root {
@@ -32,8 +43,8 @@ body {
 
 .glass-effect {
   backdrop-filter: blur(10px);
-  background: rgba(22, 27, 34, 0.8);
-  border: 1px solid rgba(48, 54, 61, 0.3);
+  background: color-mix(in srgb, var(--color-card) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
 }
 
 .hover-lift {
@@ -73,4 +84,86 @@ body {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Drag and drop enhancements */
+[draggable="true"] {
+  -webkit-user-drag: element;
+  -moz-user-drag: element;
+  -o-user-drag: element;
+  user-drag: element;
+}
+
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Control zones should not interfere with dragging */
+.control-zone {
+  pointer-events: auto;
+  z-index: 10;
+  position: relative;
+}
+
+.control-zone * {
+  pointer-events: auto;
+}
+
+/* Tile drag states */
+.tile-dragging {
+  opacity: 0.6;
+  transform: scale(0.98) rotate(1deg);
+  transition: all 0.2s ease;
+  z-index: 1000;
+}
+
+.tile-drag-over {
+  transform: scale(1.02);
+  box-shadow: 0 0 0 2px rgb(59, 130, 246, 0.5);
+  transition: all 0.2s ease;
+}
+
+/* Ensure smooth drag operations */
+.glass-effect {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* Prevent text selection during drag */
+.tile-dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Touch device support */
+@media (hover: none) and (pointer: coarse) {
+  .hover-lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  
+  /* Show edit buttons on touch devices */
+  .group:hover .group-hover\:opacity-100,
+  .group .group-hover\:opacity-100 {
+    opacity: 1;
+  }
+  
+  /* Make shortcuts edit buttons always visible on touch */
+  .group .group-hover\:opacity-100:has(button[title*="Edit"]),
+  .group .group-hover\:opacity-100:has(button[title*="Delete"]) {
+    opacity: 0.8;
+  }
+  
+  .group:active .group-hover\:opacity-100 {
+    opacity: 1;
+  }
 }

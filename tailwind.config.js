@@ -8,11 +8,22 @@ export default {
     extend: {
       colors: {
         dark: {
-          bg: '#0d1117',
-          card: '#161b22',
-          border: '#30363d',
-          text: '#f0f6fc',
-          'text-secondary': '#8b949e',
+          bg: 'var(--color-background)',
+          card: 'var(--color-card)',
+          border: 'var(--color-border)',
+          text: 'var(--color-text)',
+          'text-secondary': 'var(--color-text-secondary)',
+        },
+        theme: {
+          background: 'var(--color-background)',
+          card: 'var(--color-card)',
+          border: 'var(--color-border)',
+          text: 'var(--color-text)',
+          'text-secondary': 'var(--color-text-secondary)',
+          accent: 'var(--color-accent)',
+          success: 'var(--color-success)',
+          warning: 'var(--color-warning)',
+          error: 'var(--color-error)',
         }
       },
       animation: {

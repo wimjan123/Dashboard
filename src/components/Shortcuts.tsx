@@ -156,16 +156,24 @@ const Shortcuts: React.FC = () => {
             </button>
             
             {/* Edit/Delete buttons */}
-            <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-1">
+            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-1 pointer-events-none">
               <button
-                onClick={() => startEdit(shortcut)}
-                className="w-6 h-6 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors duration-200"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  startEdit(shortcut)
+                }}
+                className="w-6 h-6 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors duration-200 pointer-events-auto shadow-lg"
+                title="Edit shortcut"
               >
                 <Edit3 className="w-3 h-3 text-white" />
               </button>
               <button
-                onClick={() => deleteShortcut(shortcut.id)}
-                className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors duration-200"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  deleteShortcut(shortcut.id)
+                }}
+                className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors duration-200 pointer-events-auto shadow-lg"
+                title="Delete shortcut"
               >
                 <X className="w-3 h-3 text-white" />
               </button>

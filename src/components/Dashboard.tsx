@@ -2,6 +2,7 @@ import React, { useState, Suspense } from 'react'
 import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X, Move } from 'lucide-react'
 import { lazy } from 'react'
 import { useDynamicTiles } from '../hooks/useDynamicTiles'
+import ThemeSelector from './ThemeSelector'
 
 const NewsFeeds = lazy(() => import('./NewsFeeds'))
 const WeatherWidget = lazy(() => import('./WeatherWidget'))
@@ -61,19 +62,7 @@ const Dashboard: React.FC = () => {
     return (
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div className="flex items-center">
-          <button
-            className="mr-2 p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text cursor-grab active:cursor-grabbing"
-            draggable
-            onDragStart={(e) => {
-              handleDragStart(tileId)
-              e.dataTransfer.effectAllowed = 'move'
-              e.dataTransfer.setData('text/plain', tileId)
-            }}
-            onDragEnd={handleDragEnd}
-            title="Drag to rearrange"
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
+          <GripVertical className="w-4 h-4 mr-2 text-dark-text-secondary hover:text-dark-text transition-colors duration-200 drag-handle cursor-grab" />
           <span className={`w-6 h-6 mr-3 ${color}`}>{icon}</span>
           {editMode ? (
             <input
@@ -81,12 +70,13 @@ const Dashboard: React.FC = () => {
               value={title}
               onChange={(e) => updateTile(tileId, { title: e.target.value })}
               className="text-xl font-semibold bg-transparent text-dark-text border-b border-dark-border focus:outline-none focus:border-blue-400"
+              draggable={false}
             />
           ) : (
             <h2 className="text-xl font-semibold text-dark-text">{title}</h2>
           )}
         </div>
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 control-zone">
           {editMode && (
             <>
               <select
@@ -94,6 +84,7 @@ const Dashboard: React.FC = () => {
                 onChange={(e) => updateTile(tileId, { size: e.target.value as any })}
                 className="text-xs px-2 py-1 bg-dark-bg border border-dark-border rounded text-dark-text focus:outline-none focus:border-blue-400"
                 title="Tile size"
+                draggable={false}
               >
                 <option value="small">Small</option>
                 <option value="normal">Normal</option>
@@ -105,6 +96,7 @@ const Dashboard: React.FC = () => {
                 onClick={() => removeTile(tileId)}
                 className="p-1 rounded hover:bg-red-500/20 transition-colors duration-200 text-red-400 hover:text-red-300"
                 title="Remove tile"
+                draggable={false}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -115,6 +107,7 @@ const Dashboard: React.FC = () => {
               onClick={() => expandTile(tileId)}
               className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
               title="Cycle tile size"
+              draggable={false}
             >
               <Maximize2 className="w-4 h-4" />
             </button>
@@ -123,6 +116,7 @@ const Dashboard: React.FC = () => {
             onClick={() => toggleFullscreen(tileId)}
             className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
             title="Toggle fullscreen"
+            draggable={false}
           >
             <Expand className="w-4 h-4" />
           </button>
@@ -131,6 +125,7 @@ const Dashboard: React.FC = () => {
               onClick={() => resetTile(tileId)}
               className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
               title="Reset tile"
+              draggable={false}
             >
               <Minimize2 className="w-4 h-4" />
             </button>
@@ -208,60 +203,102 @@ const Dashboard: React.FC = () => {
     color: string,
     component: React.ReactNode,
     animationDelay?: string
-  }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => (
-    <div 
-      className={`${getTileClass(tileId)} glass-effect rounded-2xl p-6 hover-lift animate-slide-up flex flex-col transition-all duration-300 relative group ${
-        draggedTile === tileId ? 'opacity-30 scale-95 rotate-2' : ''
-      } ${
-        fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !col-span-12 !row-span-1 h-[calc(100vh-2rem)]' : ''
-      }`}
-      style={{ animationDelay }}
-      onDragOver={(e) => {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-      }}
-      onDragEnter={(e) => {
-        e.preventDefault()
-        if (draggedTile && draggedTile !== tileId) {
-          e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'ring-opacity-50')
-        }
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault()
-        e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-50')
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-50')
-        const droppedTileId = e.dataTransfer.getData('text/plain')
-        if (droppedTileId) handleDrop(tileId)
-      }}
-    >
-      <TileHeader 
-        tileId={tileId} 
-        icon={icon} 
-        title={title} 
-        color={color} 
-      />
-      <div className="flex-1 overflow-hidden min-h-0">
-        {component}
-      </div>
+  }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => {
+    const [isDragOver, setIsDragOver] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
+    
+    const handleTileDragStart = (e: React.DragEvent) => {
+      // Only allow drag from the grip handle or title area
+      const target = e.target as HTMLElement
+      const isFromControlZone = target.closest('.control-zone')
+      const isFromDragHandle = target.closest('.drag-handle') || target.closest('h2')
       
-      {/* Resize Handle */}
-      {!editMode && !fullscreenTile && (
-        <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <button
-            className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text cursor-nw-resize flex items-center space-x-1"
-            onClick={() => expandTile(tileId)}
-            title={`Resize tile (current: ${tiles.find(t => t.id === tileId)?.size || 'normal'})`}
-          >
-            <Move className="w-3 h-3" />
-            <span className="text-xs capitalize">{tiles.find(t => t.id === tileId)?.size}</span>
-          </button>
+      if (isFromControlZone && !isFromDragHandle) {
+        e.preventDefault()
+        return
+      }
+      
+      setIsDragging(true)
+      handleDragStart(tileId)
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', tileId)
+    }
+    
+    const handleTileDragEnd = () => {
+      setIsDragging(false)
+      handleDragEnd()
+    }
+    
+    return (
+      <div 
+        className={`
+          ${getTileClass(tileId)} 
+          glass-effect rounded-2xl p-6 animate-slide-up flex flex-col 
+          transition-all duration-300 relative group
+          ${draggedTile === tileId ? 'opacity-60 scale-[0.98] rotate-1' : 'hover-lift'}
+          ${isDragOver ? 'ring-2 ring-blue-400 ring-opacity-75 scale-105' : ''}
+          ${fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !col-span-12 !row-span-1 h-[calc(100vh-2rem)]' : ''}
+          ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
+        `}
+        style={{ animationDelay }}
+        draggable={!editMode}
+        onDragStart={handleTileDragStart}
+        onDragEnd={handleTileDragEnd}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+        }}
+        onDragEnter={(e) => {
+          e.preventDefault()
+          if (draggedTile && draggedTile !== tileId) {
+            setIsDragOver(true)
+          }
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault()
+          const rect = e.currentTarget.getBoundingClientRect()
+          const x = e.clientX
+          const y = e.clientY
+          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+            setIsDragOver(false)
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          setIsDragOver(false)
+          const droppedTileId = e.dataTransfer.getData('text/plain')
+          if (droppedTileId && droppedTileId !== tileId) {
+            handleDrop(tileId)
+          }
+        }}
+      >
+        <TileHeader 
+          tileId={tileId} 
+          icon={icon} 
+          title={title} 
+          color={color} 
+        />
+        <div className="flex-1 overflow-hidden min-h-0">
+          {component}
         </div>
-      )}
-    </div>
-  )
+        
+        {/* Resize Handle */}
+        {!editMode && !fullscreenTile && (
+          <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <button
+              className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text cursor-nw-resize flex items-center space-x-1"
+              onClick={() => expandTile(tileId)}
+              title={`Resize tile (current: ${tiles.find(t => t.id === tileId)?.size || 'normal'})`}
+              draggable={false}
+            >
+              <Move className="w-3 h-3" />
+              <span className="text-xs capitalize">{tiles.find(t => t.id === tileId)?.size}</span>
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (fullscreenTile) {
     // Render only the fullscreen tile
@@ -311,13 +348,16 @@ const Dashboard: React.FC = () => {
                 <RotateCcw className="w-4 h-4" />
               </button>
             )}
+            <ThemeSelector />
           </div>
           
-          {editMode && (
-            <div className="text-sm text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full">
-              Edit Mode Active
-            </div>
-          )}
+          <div className="flex items-center space-x-2">
+            {editMode && (
+              <div className="text-sm text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full">
+                Edit Mode Active
+              </div>
+            )}
+          </div>
         </div>
         
         <h1 className="text-4xl font-bold text-dark-text mb-2 tracking-wide">

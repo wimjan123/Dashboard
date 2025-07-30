@@ -7,16 +7,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a modern dashboard application for Windows and Mac with a beautiful dark interface. The project aims to create a comprehensive desktop dashboard that integrates multiple information sources and utilities.
 
 ### Features
-- Newsfeeds (RSS, Twitter, Reuters, AP, Perplexity)
-- Multiple livestreams (IPTV, YouTube, embedded livestream)
-- Weather forecast
-- Shortcuts to access websites and open other apps
-- Mail integration
-- To-do list
+- **Newsfeeds**: RSS feeds with category filtering and source management
+- **Weather Widget**: Advanced weather with forecasts, multiple locations, and API integration
+- **Travel & Commute**: Route planning with departure/destination management and public transport
+- **Quick Access Shortcuts**: Customizable shortcuts with icons, colors, and easy editing
+- **Todo Management**: Full CRUD task management with localStorage persistence
+- **Theme System**: Multiple themes including dark, light, and auto modes
+- **Livestreams**: IPTV, YouTube, and embedded livestream support
+- **AI Chat**: Integrated AI assistant for productivity
+- **Mini Games**: Entertainment widgets including Snake and 2048
+- **Dynamic Tiles**: Drag-and-drop, resizable tiles with fullscreen support
 
 ## Project Status
 
-✅ **COMPLETED** - Beautiful dashboard application with modern UI and smooth animations
+✅ **v1.1.0** - Enhanced dashboard with theme system, improved UX, and advanced features
 
 ## Development Setup
 
@@ -76,23 +80,26 @@ src-tauri/              # Tauri backend (Rust)
 └── tauri.conf.json     # Tauri configuration
 ```
 
-### Features Implemented
+### v1.1.0 Features Implemented
+✅ **Enhanced Theme System**: Dark, light, and auto themes with dynamic switching
+✅ **Improved Drag & Drop**: Better tile dragging with visual feedback and touch support
+✅ **Advanced Weather Widget**: Hourly/weekly forecasts, multiple locations, weather alerts
+✅ **Public Transport Integration**: Real-time transit data and multi-modal route planning
+✅ **Enhanced Travel Widget**: Departure/destination management with location swapping
+✅ **Fixed Quick Links**: Resolved disappearing edit buttons with improved hover states
+✅ **News Feed Enhancements**: Better height constraints and source management
+✅ **Tile Management**: Resizable tiles with dynamic size controls
+✅ **Performance Optimizations**: Faster loading and better responsive design
+
+### Previous Features (v1.0.0)
 ✅ Beautiful dark theme with glassmorphism effects
-✅ Smooth animations and transitions
-✅ Responsive grid layout
-✅ News feeds with category filtering (mock data)
-✅ Weather widget with animated icons (mock data)
+✅ Smooth animations and transitions  
+✅ Responsive 12-column grid layout
+✅ News feeds with category filtering
+✅ Weather widget with animated icons
 ✅ Full-featured todo list with localStorage
 ✅ Customizable shortcuts with icons and colors
-✅ Hover effects and micro-interactions
-
-### Ready for Integration
-- RSS feed APIs
-- Weather API integration
-- Real-time data updates
-- Additional dashboard widgets
-- Mail integration
-- Livestream embedding
+✅ Interactive tile system with fullscreen support
 
 ## Notes
 

@@ -1,10 +1,13 @@
 import Dashboard from './components/Dashboard'
+import { ThemeProvider } from './contexts/ThemeContext'
 
 function App() {
   return (
-    <div className="w-full min-h-screen bg-dark-bg">
-      <Dashboard />
-    </div>
+    <ThemeProvider>
+      <div className="w-full min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
+        <Dashboard />
+      </div>
+    </ThemeProvider>
   )
 }
 

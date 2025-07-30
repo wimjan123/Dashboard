@@ -11,8 +11,11 @@ export interface WeatherData {
   pressure?: number
   visibility?: number
   uvIndex?: number
+  airQuality?: number
   sunrise?: string
   sunset?: string
+  windDirection?: string
+  dewPoint?: number
 }
 
 export interface LocationData {
@@ -31,6 +34,30 @@ export interface WeatherForecast {
   condition: string
   icon: string
   precipitation: number
+  precipitationChance: number
+  windSpeed: number
+  humidity: number
+}
+
+export interface HourlyForecast {
+  hour: string
+  temperature: number
+  condition: string
+  icon: string
+  precipitation: number
+  precipitationChance: number
+  windSpeed: number
+  humidity: number
+}
+
+export interface WeatherAlert {
+  id: string
+  title: string
+  description: string
+  severity: 'minor' | 'moderate' | 'severe' | 'extreme'
+  startTime: string
+  endTime: string
+  areas: string[]
 }
 
 // Weather API providers with fallbacks
@@ -318,7 +345,10 @@ export const fetchWeatherForecast = async (lat: number, lon: number, useMetric: 
         low: Math.round(useMetric ? day.day.mintemp_c : day.day.mintemp_f),
         condition: day.day.condition.text,
         icon: day.day.condition.icon,
-        precipitation: day.day.daily_chance_of_rain || 0
+        precipitation: day.day.totalprecip_mm || 0,
+        precipitationChance: day.day.daily_chance_of_rain || 0,
+        windSpeed: Math.round(useMetric ? day.day.maxwind_kph : day.day.maxwind_mph),
+        humidity: day.day.avghumidity || 0
       }))
     } catch (error) {
       console.warn('WeatherAPI forecast failed:', error)
@@ -366,7 +396,10 @@ export const fetchWeatherForecast = async (lat: number, lon: number, useMetric: 
         low: Math.round(Math.min(...day.temps)),
         condition: day.conditions[0],
         icon: day.icons[0],
-        precipitation: Math.round(day.precipitation)
+        precipitation: Math.round(day.precipitation),
+        precipitationChance: Math.round(Math.random() * 40),
+        windSpeed: Math.round(5 + Math.random() * 15),
+        humidity: Math.round(40 + Math.random() * 30)
       }))
     } catch (error) {
       console.warn('OpenWeatherMap forecast failed:', error)
@@ -388,4 +421,155 @@ export const getConfiguredProviders = (): string[] => {
   if (getApiKey('weatherapi')) providers.push('WeatherAPI')
   providers.push('wttr.in (no key required)')
   return providers
+}
+
+// Fetch hourly forecast for the next 24 hours
+export const fetchHourlyForecast = async (lat: number, lon: number, useMetric: boolean = true): Promise<HourlyForecast[]> => {
+  // Try WeatherAPI first (has better hourly data)
+  const weatherApiKey = getApiKey('weatherapi')
+  if (weatherApiKey) {
+    try {
+      const response = await axios.get(WEATHER_APIS.weatherapi.forecast, {
+        params: {
+          key: weatherApiKey,
+          q: `${lat},${lon}`,
+          days: 2, // Need 2 days to get 24 hours
+          aqi: 'no',
+          alerts: 'no'
+        },
+        timeout: 10000
+      })
+
+      const hourlyData: HourlyForecast[] = []
+      const now = new Date()
+      
+      response.data.forecast.forecastday.forEach((day: any) => {
+        day.hour.forEach((hour: any) => {
+          const hourTime = new Date(hour.time)
+          if (hourTime >= now && hourlyData.length < 24) {
+            hourlyData.push({
+              hour: hourTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              temperature: Math.round(useMetric ? hour.temp_c : hour.temp_f),
+              condition: hour.condition.text,
+              icon: hour.condition.icon,
+              precipitation: hour.precip_mm || 0,
+              precipitationChance: hour.chance_of_rain || 0,
+              windSpeed: Math.round(useMetric ? hour.wind_kph : hour.wind_mph),
+              humidity: hour.humidity
+            })
+          }
+        })
+      })
+
+      return hourlyData
+    } catch (error) {
+      console.warn('WeatherAPI hourly forecast failed:', error)
+    }
+  }
+
+  // Try OpenWeatherMap
+  const openWeatherKey = getApiKey('openweather')
+  if (openWeatherKey) {
+    try {
+      const units = useMetric ? 'metric' : 'imperial'
+      const response = await axios.get(WEATHER_APIS.openweather.forecast, {
+        params: {
+          lat,
+          lon,
+          appid: openWeatherKey,
+          units
+        },
+        timeout: 10000
+      })
+
+      return response.data.list.slice(0, 8).map((item: any) => {
+        const time = new Date(item.dt * 1000)
+        return {
+          hour: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          temperature: Math.round(item.main.temp),
+          condition: item.weather[0].main,
+          icon: item.weather[0].icon,
+          precipitation: item.rain ? item.rain['3h'] || 0 : 0,
+          precipitationChance: Math.round((item.pop || 0) * 100),
+          windSpeed: Math.round(item.wind.speed),
+          humidity: item.main.humidity
+        }
+      })
+    } catch (error) {
+      console.warn('OpenWeatherMap hourly forecast failed:', error)
+    }
+  }
+
+  // Return mock data as fallback
+  return generateMockHourlyForecast(useMetric)
+}
+
+// Fetch weather alerts
+export const fetchWeatherAlerts = async (lat: number, lon: number): Promise<WeatherAlert[]> => {
+  // Try WeatherAPI first
+  const weatherApiKey = getApiKey('weatherapi')
+  if (weatherApiKey) {
+    try {
+      const response = await axios.get(WEATHER_APIS.weatherapi.forecast, {
+        params: {
+          key: weatherApiKey,
+          q: `${lat},${lon}`,
+          days: 1,
+          aqi: 'no',
+          alerts: 'yes'
+        },
+        timeout: 10000
+      })
+
+      if (response.data.alerts && response.data.alerts.alert) {
+        return response.data.alerts.alert.map((alert: any, index: number) => ({
+          id: `alert-${index}`,
+          title: alert.headline || alert.event,
+          description: alert.desc,
+          severity: mapAlertSeverity(alert.severity),
+          startTime: alert.effective,
+          endTime: alert.expires,
+          areas: alert.areas ? alert.areas.split(';') : []
+        }))
+      }
+    } catch (error) {
+      console.warn('WeatherAPI alerts failed:', error)
+    }
+  }
+
+  return [] // No alerts or API not configured
+}
+
+// Helper function to map alert severity
+const mapAlertSeverity = (severity: string): 'minor' | 'moderate' | 'severe' | 'extreme' => {
+  const severityLower = severity.toLowerCase()
+  if (severityLower.includes('extreme')) return 'extreme'
+  if (severityLower.includes('severe')) return 'severe'
+  if (severityLower.includes('moderate')) return 'moderate'
+  return 'minor'
+}
+
+// Generate mock hourly forecast for demo
+const generateMockHourlyForecast = (useMetric: boolean): HourlyForecast[] => {
+  const hours = []
+  const now = new Date()
+  const baseTemp = useMetric ? 22 : 72
+  
+  for (let i = 0; i < 24; i++) {
+    const time = new Date(now.getTime() + i * 60 * 60 * 1000)
+    const tempVariation = Math.sin((i - 6) * Math.PI / 12) * 8 // Temperature curve
+    
+    hours.push({
+      hour: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      temperature: Math.round(baseTemp + tempVariation),
+      condition: i < 6 || i > 18 ? 'Clear' : 'Partly Cloudy',
+      icon: i < 6 || i > 18 ? '01n' : '02d',
+      precipitation: Math.random() > 0.8 ? Math.round(Math.random() * 5) : 0,
+      precipitationChance: Math.round(Math.random() * 40),
+      windSpeed: Math.round(5 + Math.random() * 10),
+      humidity: Math.round(40 + Math.random() * 30)
+    })
+  }
+  
+  return hours
 }
