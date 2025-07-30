@@ -36,40 +36,44 @@ const Dashboard: React.FC = () => {
 
 
   const [showAddTile, setShowAddTile] = useState(false)
-  const [draggedTileId, setDraggedTileId] = useState<string | null>(null)
-  const [dragOverTileId, setDragOverTileId] = useState<string | null>(null)
+  const [selectedTileId, setSelectedTileId] = useState<string | null>(null)
+  const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null)
   const tileRefs = useRef<{ [id: string]: HTMLDivElement | null }>({})
   const containerRef = useRef<HTMLDivElement | null>(null)
 
 
-  // Drag and drop handlers for grid rearrangement
-  const handleDragStart = (tileId: string) => {
+  // Click-based tile reordering handlers
+  const handleTileSelect = (tileId: string) => {
     if (!editMode) return
-    setDraggedTileId(tileId)
-  }
-
-  const handleDragEnd = () => {
-    setDraggedTileId(null)
-    setDragOverTileId(null)
-  }
-
-  const handleDragOver = (e: React.DragEvent, tileId: string) => {
-    e.preventDefault()
-    if (!editMode) return
-    setDragOverTileId(tileId)
-  }
-
-  const handleDragLeave = () => {
-    setDragOverTileId(null)
-  }
-
-  const handleDrop = (e: React.DragEvent, targetTileId: string) => {
-    e.preventDefault()
-    if (!editMode || !draggedTileId || draggedTileId === targetTileId) return
     
-    reorderTiles(draggedTileId, targetTileId)
-    setDraggedTileId(null)
-    setDragOverTileId(null)
+    if (selectedTileId === tileId) {
+      // Deselect if clicking the same tile
+      setSelectedTileId(null)
+    } else if (selectedTileId && selectedTileId !== tileId) {
+      // Swap tiles if one is already selected
+      reorderTiles(selectedTileId, tileId)
+      setSelectedTileId(null)
+      setHoveredTargetId(null)
+    } else {
+      // Select tile
+      setSelectedTileId(tileId)
+    }
+  }
+
+  const handleTargetHover = (tileId: string) => {
+    if (!editMode || !selectedTileId || selectedTileId === tileId) return
+    setHoveredTargetId(tileId)
+  }
+
+  const handleTargetLeave = () => {
+    setHoveredTargetId(null)
+  }
+
+  const handleClickOutside = () => {
+    if (selectedTileId) {
+      setSelectedTileId(null)
+      setHoveredTargetId(null)
+    }
   }
 
   
@@ -97,15 +101,24 @@ const Dashboard: React.FC = () => {
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div className="flex items-center">
           {editMode && (
-            <div 
-              className="drag-handle mr-2 p-1 cursor-grab active:cursor-grabbing"
-              title="Drag to reorder"
-              onMouseDown={(e) => e.stopPropagation()}
+            <button 
+              className="grip-handle mr-2 p-1 cursor-pointer hover:bg-dark-border rounded transition-colors duration-200"
+              title={selectedTileId === tileId ? "Click to deselect" : selectedTileId ? "Click to swap here" : "Click to select"}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleTileSelect(tileId)
+              }}
             >
               <GripVertical 
-                className="w-4 h-4 text-dark-text-secondary hover:text-dark-text transition-colors duration-200" 
+                className={`w-4 h-4 transition-colors duration-200 ${
+                  selectedTileId === tileId 
+                    ? 'text-blue-400' 
+                    : selectedTileId && selectedTileId !== tileId
+                    ? 'text-green-400 hover:text-green-300'
+                    : 'text-dark-text-secondary hover:text-dark-text'
+                }`}
               />
-            </div>
+            </button>
           )}
           <span className={`w-6 h-6 mr-3 ${color}`}>{icon}</span>
           {editMode ? (
@@ -249,26 +262,32 @@ const Dashboard: React.FC = () => {
     component: React.ReactNode,
     animationDelay?: string
   }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => {
-    const isDraggedOver = dragOverTileId === tileId
-    const isDragging = draggedTileId === tileId
+    const isSelected = selectedTileId === tileId
+    const isTargetHovered = hoveredTargetId === tileId
+    const isTargetAvailable = selectedTileId && selectedTileId !== tileId
 
     return (
       <div
-        draggable={editMode}
-        onDragStart={() => handleDragStart(tileId)}
-        onDragEnd={handleDragEnd}
-        onDragOver={(e) => handleDragOver(e, tileId)}
-        onDragLeave={handleDragLeave}
-        onDrop={(e) => handleDrop(e, tileId)}
         className={`
           glass-effect rounded-2xl p-6 animate-slide-up flex flex-col 
           transition-all duration-300 group h-full
-          ${editMode ? 'border-2 border-blue-400/30 shadow-lg cursor-move' : ''}
-          ${isDraggedOver && editMode ? 'border-green-400 bg-green-400/10' : ''}
-          ${isDragging ? 'opacity-50 scale-95' : ''}
+          ${editMode ? 'border-2' : 'border border-transparent'}
+          ${isSelected 
+            ? 'border-blue-500 shadow-lg shadow-blue-500/25 bg-blue-500/5' 
+            : editMode 
+            ? 'border-blue-400/30' 
+            : 'border-transparent'
+          }
+          ${isTargetAvailable && !isSelected
+            ? 'border-green-400/50 hover:border-green-400 hover:bg-green-400/5 cursor-pointer' 
+            : ''
+          }
+          ${isTargetHovered ? 'border-green-400 bg-green-400/10 transform scale-[1.02]' : ''}
           ${fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !w-full !h-full' : ''}
         `}
         style={{ animationDelay }}
+        onMouseEnter={() => handleTargetHover(tileId)}
+        onMouseLeave={handleTargetLeave}
       >
         <TileHeader 
           tileId={tileId} 
@@ -282,18 +301,22 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
         
-        {/* Edit Mode Indicator */}
+        {/* Edit Mode Indicators */}
         {editMode && (
-          <div className="absolute top-1 right-1 bg-blue-500 text-white text-xs px-2 py-1 rounded opacity-75">
-            EDIT
-          </div>
-        )}
-        
-        {/* Drag overlay indicator */}
-        {isDraggedOver && editMode && (
-          <div className="absolute inset-0 border-2 border-dashed border-green-400 rounded-2xl bg-green-400/5 flex items-center justify-center">
-            <span className="text-green-400 font-medium">Drop here to reorder</span>
-          </div>
+          <>
+            <div className={`absolute top-1 right-1 text-white text-xs px-2 py-1 rounded transition-colors duration-200 ${
+              isSelected ? 'bg-blue-500' : 'bg-blue-500/75'
+            }`}>
+              {isSelected ? 'SELECTED' : 'EDIT'}
+            </div>
+            
+            {/* Target indicator when tile can be swapped */}
+            {isTargetAvailable && !isSelected && (
+              <div className="absolute inset-0 border-2 border-dashed border-green-400/30 rounded-2xl bg-green-400/5 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200">
+                <span className="text-green-400 font-medium text-sm">Click to swap here</span>
+              </div>
+            )}
+          </>
         )}
       </div>
     )
@@ -370,7 +393,12 @@ const Dashboard: React.FC = () => {
         {editMode && (
           <div className="mb-4 p-3 bg-blue-500/10 border border-blue-400/30 rounded-lg">
             <p className="text-blue-400 text-sm font-medium text-center">
-              🎯 Edit Mode Active - Drag tiles to reorder them in the grid, modify tile settings
+              🎯 Edit Mode Active - Click grip handles to select and swap tiles, modify tile settings
+              {selectedTileId && (
+                <span className="block mt-1 text-blue-300 text-xs">
+                  Selected a tile → Click another tile's grip to swap positions
+                </span>
+              )}
             </p>
           </div>
         )}
@@ -387,6 +415,7 @@ const Dashboard: React.FC = () => {
       <div 
         ref={containerRef} 
         className="px-6 pb-20"
+        onClick={handleClickOutside}
       >
         <div 
           className="grid grid-cols-12 gap-6"
@@ -399,6 +428,7 @@ const Dashboard: React.FC = () => {
                 key={tile.id}
                 ref={el => tileRefs.current[tile.id] = el}
                 className={getTileClass(tile.id)}
+                onClick={(e) => e.stopPropagation()}
               >
                 <TileComponent
                   tileId={tile.id}
