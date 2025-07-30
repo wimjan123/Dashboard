@@ -230,7 +230,7 @@ const WeatherWidget: React.FC = () => {
   if (!weather) return null
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col max-h-full overflow-hidden">
       {/* Header with Settings */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -259,7 +259,7 @@ const WeatherWidget: React.FC = () => {
       </div>
 
       {!showSettings ? (
-        <div className="flex-1 overflow-y-auto scrollbar-thin max-h-[80vh]">
+        <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
           {/* Main Weather Display */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -457,7 +457,7 @@ const WeatherWidget: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto scrollbar-thin max-h-[80vh]">
+        <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
           {/* Settings Panel */}
           <div className="space-y-4">
             {/* API Status & Configuration */}
