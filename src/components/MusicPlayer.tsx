@@ -27,7 +27,7 @@ const MusicPlayer: React.FC = () => {
   }
 
   useEffect(() => {
-    let interval: NodeJS.Timeout
+    let interval: number
     if (isPlaying) {
       interval = setInterval(() => {
         setCurrentTime(prev => {
@@ -39,7 +39,9 @@ const MusicPlayer: React.FC = () => {
         })
       }, 1000)
     }
-    return () => clearInterval(interval)
+    return () => {
+      if (interval) clearInterval(interval)
+    }
   }, [isPlaying, currentTrack.duration])
 
   const formatTime = (seconds: number) => {
