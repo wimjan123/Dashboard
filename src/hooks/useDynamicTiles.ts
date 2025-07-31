@@ -1,18 +1,14 @@
 import { useState, useCallback } from 'react'
 
 export type TileSize = 'small' | 'normal' | 'medium' | 'large' | 'extra-large'
-export type TileColumns = 2 | 3 | 4 | 5
 export type TileType = 'news' | 'weather' | 'todo' | 'shortcuts' | 'livestreams' | 'ai-chat' | 'minigames' | 'travel'
 
 export interface DynamicTileConfig {
   id: string
   type: TileType
   title: string
-  columns: TileColumns
-  height: number
+  size: TileSize
   order: number
-  x?: number
-  y?: number
   isFullscreen: boolean
   config?: Record<string, any>
 }
@@ -102,68 +98,53 @@ export const TILE_TYPES: TileTypeInfo[] = [
   }
 ]
 
-export const TILE_SIZE_CLASSES: Record<TileSize, {width: number; height: number}> = {
-  'small': { width: 200, height: 200 },
-  'normal': { width: 300, height: 300 },
-  'medium': { width: 400, height: 400 },
-  'large': { width: 600, height: 600 },
-  'extra-large': { width: 800, height: 800 }
-}
-
-// Column-based width system for responsive grid
-export const COLUMN_WIDTHS: Record<TileColumns, { span: number; baseWidth: number; minWidth: number }> = {
-  2: { span: 2, baseWidth: 300, minWidth: 250 },
-  3: { span: 3, baseWidth: 450, minWidth: 350 },
-  4: { span: 4, baseWidth: 600, minWidth: 450 },
-  5: { span: 5, baseWidth: 750, minWidth: 550 }
-}
-
-export const GRID_CONFIG = {
-  columns: 12,
-  gap: 24,
-  minTileHeight: 200,
-  defaultTileHeight: 300
+const TILE_SIZE_CLASSES: Record<TileSize, string> = {
+  'small': 'col-span-3 row-span-1',
+  'normal': 'col-span-4 row-span-1',
+  'medium': 'col-span-6 row-span-1',  
+  'large': 'col-span-8 row-span-2',
+  'extra-large': 'col-span-12 row-span-3'
 }
 
 const DEFAULT_TILES: DynamicTileConfig[] = [
-  { id: 'news-1', type: 'news', title: 'News Feeds', columns: 3, height: 300, order: 1, isFullscreen: false },
-  { id: 'weather-1', type: 'weather', title: 'Weather', columns: 2, height: 300, order: 2, isFullscreen: false },
-  { id: 'todo-1', type: 'todo', title: 'Tasks', columns: 3, height: 300, order: 3, isFullscreen: false },
-  { id: 'shortcuts-1', type: 'shortcuts', title: 'Quick Access', columns: 2, height: 300, order: 4, isFullscreen: false },
-  { id: 'travel-1', type: 'travel', title: 'Travel & Commute', columns: 4, height: 300, order: 5, isFullscreen: false },
+  { id: 'news-1', type: 'news', title: 'News Feeds', size: 'normal', order: 1, isFullscreen: false },
+  { id: 'weather-1', type: 'weather', title: 'Weather', size: 'normal', order: 2, isFullscreen: false },
+  { id: 'todo-1', type: 'todo', title: 'Tasks', size: 'normal', order: 3, isFullscreen: false },
+  { id: 'shortcuts-1', type: 'shortcuts', title: 'Quick Access', size: 'normal', order: 4, isFullscreen: false },
+  { id: 'travel-1', type: 'travel', title: 'Travel & Commute', size: 'normal', order: 5, isFullscreen: false },
 ]
 
-// Migration helper to convert old tile format to new column-based format
+// Migration helper to convert complex column-based tiles back to simple sizes
 const migrateTileData = (tiles: any[]): DynamicTileConfig[] => {
   return tiles.map(tile => {
-    // If tile already has columns, it's already migrated
-    if (tile.columns !== undefined) {
+    // If tile already has simple size property, it's already in the right format
+    if (tile.size && !tile.columns) {
       return tile as DynamicTileConfig
     }
 
-    // Migrate old width-based tiles to column-based tiles
-    let columns: TileColumns = 3 // Default
+    // Migrate from complex column-based system back to simple sizes
+    let size: TileSize = 'normal' // Default
     
-    if (tile.width !== undefined) {
-      // Map old width values to columns
-      if (tile.width <= 250) columns = 2
-      else if (tile.width <= 350) columns = 3
-      else if (tile.width <= 500) columns = 4
-      else columns = 5
+    if (tile.columns !== undefined) {
+      // Map columns back to simple sizes
+      if (tile.columns === 2) size = 'small'
+      else if (tile.columns === 3) size = 'normal'
+      else if (tile.columns === 4) size = 'medium'
+      else if (tile.columns === 5) size = 'large'
+    } else if (tile.width !== undefined) {
+      // Handle old width-based tiles
+      if (tile.width <= 250) size = 'small'
+      else if (tile.width <= 350) size = 'normal'
+      else if (tile.width <= 500) size = 'medium'
+      else size = 'large'
     }
-
-    // Ensure we have a valid height
-    const height = tile.height || GRID_CONFIG.defaultTileHeight
 
     return {
       id: tile.id,
       type: tile.type,
       title: tile.title,
-      columns,
-      height,
+      size,
       order: tile.order || 0,
-      x: tile.x,
-      y: tile.y,
       isFullscreen: tile.isFullscreen || false,
       config: tile.config
     } as DynamicTileConfig
@@ -205,15 +186,11 @@ export const useDynamicTiles = () => {
       throw new Error(`Only one ${tileInfo.name} tile is allowed`)
     }
 
-    // Default to 3 columns for new tiles
-    const defaultColumns: TileColumns = 3
-
     const newTile: DynamicTileConfig = {
       id: `${type}-${Date.now()}`,
       type,
       title: customTitle || tileInfo.name,
-      columns: defaultColumns,
-      height: GRID_CONFIG.defaultTileHeight,
+      size: tileInfo.defaultSize,
       order: Math.max(...tiles.map(t => t.order), 0) + 1,
       isFullscreen: false,
       config
@@ -236,9 +213,7 @@ export const useDynamicTiles = () => {
       id: `${tile.type}-${Date.now()}`,
       title: customTitle || `${tile.title} (Copy)`,
       order: Math.max(...tiles.map(t => t.order), 0) + 1,
-      isFullscreen: false,
-      x: undefined,
-      y: undefined
+      isFullscreen: false
     }
 
     saveTiles([...tiles, newTile])
@@ -274,15 +249,13 @@ export const useDynamicTiles = () => {
 
   const getTileClass = useCallback((tileId: string) => {
     const tile = tiles.find(t => t.id === tileId)
-    if (!tile) return ''
+    if (!tile) return TILE_SIZE_CLASSES.normal
 
     if (tile.isFullscreen) {
-      return 'fixed inset-0 z-50'
+      return 'col-span-12 row-span-1'
     }
-    
-    // Calculate column span based on grid system
-    const columnSpan = Math.round((tile.columns * GRID_CONFIG.columns) / 6) // 6 is our base division
-    return `col-span-${Math.min(columnSpan, GRID_CONFIG.columns)}`
+
+    return TILE_SIZE_CLASSES[tile.size]
   }, [tiles])
 
   const getSortedTiles = useCallback(() => {
@@ -304,23 +277,15 @@ export const useDynamicTiles = () => {
     const tile = tiles.find(t => t.id === tileId)
     if (!tile) return
 
-    const columnOptions: TileColumns[] = [2, 3, 4, 5]
-    const currentIndex = columnOptions.findIndex(c => c === tile.columns)
-    const nextIndex = (currentIndex + 1) % columnOptions.length
+    const sizes: TileSize[] = ['small', 'normal', 'medium', 'large', 'extra-large']
+    const currentIndex = sizes.indexOf(tile.size)
+    const nextIndex = (currentIndex + 1) % sizes.length
     
-    updateTile(tileId, { 
-      columns: columnOptions[nextIndex]
-    })
+    updateTile(tileId, { size: sizes[nextIndex] })
   }, [tiles, updateTile])
 
   const resetTile = useCallback((tileId: string) => {
-    updateTile(tileId, { 
-      columns: 3,
-      height: GRID_CONFIG.defaultTileHeight,
-      isFullscreen: false,
-      x: undefined,
-      y: undefined
-    })
+    updateTile(tileId, { size: 'normal', isFullscreen: false })
   }, [updateTile])
 
   const handleDragStart = useCallback((tileId: string) => {
@@ -348,65 +313,6 @@ export const useDynamicTiles = () => {
     saveTiles(DEFAULT_TILES)
   }, [saveTiles])
 
-  // Collision detection and positioning utilities
-  const checkCollision = useCallback((tile1: DynamicTileConfig, tile2: DynamicTileConfig) => {
-    if (!tile1.x || !tile1.y || !tile2.x || !tile2.y) return false
-    
-    const tile1Width = COLUMN_WIDTHS[tile1.columns].baseWidth
-    const tile2Width = COLUMN_WIDTHS[tile2.columns].baseWidth
-    
-    return !(
-      tile1.x + tile1Width <= tile2.x ||
-      tile2.x + tile2Width <= tile1.x ||
-      tile1.y + tile1.height <= tile2.y ||
-      tile2.y + tile2.height <= tile1.y
-    )
-  }, [])
-
-  const findValidPosition = useCallback((targetTile: DynamicTileConfig, excludeId?: string) => {
-    const containerWidth = 1200 // Approximate container width
-    const tileWidth = COLUMN_WIDTHS[targetTile.columns].baseWidth
-    const maxX = containerWidth - tileWidth
-    const gridSize = GRID_CONFIG.gap
-    
-    for (let y = 0; y < 2000; y += gridSize) {
-      for (let x = 0; x <= maxX; x += gridSize) {
-        const testTile = { ...targetTile, x, y }
-        
-        const hasCollision = tiles.some(tile => {
-          if (tile.id === excludeId || tile.id === targetTile.id) return false
-          return checkCollision(testTile, tile)
-        })
-        
-        if (!hasCollision) {
-          return { x, y }
-        }
-      }
-    }
-    
-    // Fallback to stacked position
-    return { x: 0, y: tiles.length * (GRID_CONFIG.defaultTileHeight + GRID_CONFIG.gap) }
-  }, [tiles, checkCollision])
-
-  const updateTilePosition = useCallback((tileId: string, x: number, y: number) => {
-    const tile = tiles.find(t => t.id === tileId)
-    if (!tile) return
-
-    const updatedTile = { ...tile, x, y }
-    const hasCollision = tiles.some(otherTile => {
-      if (otherTile.id === tileId) return false
-      return checkCollision(updatedTile, otherTile)
-    })
-
-    if (!hasCollision) {
-      updateTile(tileId, { x, y })
-    } else {
-      // Find a valid position
-      const validPosition = findValidPosition(updatedTile, tileId)
-      updateTile(tileId, validPosition)
-    }
-  }, [tiles, checkCollision, findValidPosition, updateTile])
-
   return {
     tiles,
     editMode,
@@ -428,11 +334,6 @@ export const useDynamicTiles = () => {
     handleDrop,
     getAvailableTileTypes,
     resetToDefaults,
-    checkCollision,
-    findValidPosition,
-    updateTilePosition,
-    TILE_TYPES,
-    COLUMN_WIDTHS,
-    GRID_CONFIG
+    TILE_TYPES
   }
 }

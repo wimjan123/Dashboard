@@ -1,9 +1,7 @@
-import React, { useState, Suspense, useRef, useCallback } from 'react'
-import { ResizableBox } from 'react-resizable'
-import 'react-resizable/css/styles.css'
-import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X, Save, Move, Grid3X3 } from 'lucide-react'
+import React, { useState, Suspense, useCallback } from 'react'
+import { Rss, Cloud, CheckSquare, ExternalLink, Video, Maximize2, Minimize2, Expand, GripVertical, Bot, Gamepad2, MapPin, Plus, Edit, RotateCcw, X, Save } from 'lucide-react'
 import { lazy } from 'react'
-import { useDynamicTiles, COLUMN_WIDTHS, GRID_CONFIG, TileColumns } from '../hooks/useDynamicTiles'
+import { useDynamicTiles } from '../hooks/useDynamicTiles'
 import ThemeSelector from './ThemeSelector'
 
 const NewsFeeds = lazy(() => import('./NewsFeeds'))
@@ -33,28 +31,23 @@ const Dashboard: React.FC = () => {
     expandTile,
     resetTile,
     getAvailableTileTypes,
-    resetToDefaults,
-    updateTilePosition,
-    COLUMN_WIDTHS,
-    GRID_CONFIG
+    resetToDefaults
   } = useDynamicTiles()
-
 
   const [showAddTile, setShowAddTile] = useState(false)
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null)
   const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null)
-  const [tileSizes, setTileSizes] = useState<{ [id: string]: { width: number; height: number } }>({})
-  const [gridMode, setGridMode] = useState(false)
-  const tileRefs = useRef<{ [id: string]: HTMLDivElement | null }>({})
-  const containerRef = useRef<HTMLDivElement | null>(null)
-
-  const handleResize = (tileId: string) => (e: any, { size }: { size: { width: number; height: number } }) => {
-    setTileSizes(prev => ({
-      ...prev,
-      [tileId]: size
-    }))
-  }
-
+  
+  const currentTime = new Date().toLocaleTimeString([], { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
+  const currentDate = new Date().toLocaleDateString([], { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  })
 
   // Click-based tile reordering handlers
   const handleTileSelect = useCallback((tileId: string, event: React.MouseEvent) => {
@@ -98,111 +91,172 @@ const Dashboard: React.FC = () => {
     }
   }, [selectedTileId])
 
-  
-  const currentTime = new Date().toLocaleTimeString([], { 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  })
-  const currentDate = new Date().toLocaleDateString([], { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  })
+  const handleTitleEdit = useCallback((tileId: string, newTitle: string) => {
+    updateTile(tileId, { title: newTitle })
+  }, [updateTile])
 
-  const TileHeader: React.FC<{ 
-    tileId: string, 
-    icon: React.ReactNode, 
-    title: string, 
-    color: string 
+  const renderTileContent = (type: string) => {
+    switch (type) {
+      case 'news':
+        return <NewsFeeds />
+      case 'weather':
+        return <WeatherWidget />
+      case 'todo':
+        return <TodoList />
+      case 'shortcuts':
+        return <Shortcuts />
+      case 'livestreams':
+        return <Livestreams />
+      case 'ai-chat':
+        return <AIChat />
+      case 'minigames':
+        return <Minigames />
+      case 'travel':
+        return <TravelWidget />
+      default:
+        return <div>Unknown tile type</div>
+    }
+  }
+
+  const getTileIcon = (type: string) => {
+    switch (type) {
+      case 'news':
+        return <Rss className="w-4 h-4" />
+      case 'weather':
+        return <Cloud className="w-4 h-4" />
+      case 'todo':
+        return <CheckSquare className="w-4 h-4" />
+      case 'shortcuts':
+        return <ExternalLink className="w-4 h-4" />
+      case 'livestreams':
+        return <Video className="w-4 h-4" />
+      case 'ai-chat':
+        return <Bot className="w-4 h-4" />
+      case 'minigames':
+        return <Gamepad2 className="w-4 h-4" />
+      case 'travel':
+        return <MapPin className="w-4 h-4" />
+      default:
+        return <ExternalLink className="w-4 h-4" />
+    }
+  }
+
+  const getTileColor = (type: string) => {
+    switch (type) {
+      case 'news':
+        return 'text-blue-400'
+      case 'weather':
+        return 'text-sky-400'
+      case 'todo':
+        return 'text-green-400'
+      case 'shortcuts':
+        return 'text-purple-400'
+      case 'livestreams':
+        return 'text-red-400'
+      case 'ai-chat':
+        return 'text-blue-400'
+      case 'minigames':
+        return 'text-purple-400'
+      case 'travel':
+        return 'text-orange-400'
+      default:
+        return 'text-gray-400'
+    }
+  }
+
+  const TileHeader: React.FC<{
+    tileId: string
+    icon: React.ReactNode
+    title: string
+    color: string
   }> = ({ tileId, icon, title, color }) => {
-    const tile = tiles.find(t => t.id === tileId)
-    if (!tile) return null
+    const [isEditing, setIsEditing] = useState(false)
+    const [editValue, setEditValue] = useState(title)
+
+    const handleSave = () => {
+      if (editValue.trim() && editValue !== title) {
+        handleTitleEdit(tileId, editValue.trim())
+      }
+      setIsEditing(false)
+      setEditValue(title)
+    }
+
+    const handleCancel = () => {
+      setIsEditing(false)
+      setEditValue(title)
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleSave()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        handleCancel()
+      }
+    }
 
     return (
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <div className="flex items-center">
-          {editMode && (
-            <button 
-              className="grip-handle mr-2 p-1 cursor-pointer hover:bg-dark-border rounded transition-colors duration-200"
-              title={selectedTileId === tileId ? "Click to deselect" : selectedTileId ? "Click to swap here" : "Click to select"}
-              onClick={(e) => handleTileSelect(tileId, e)}
-            >
-              <GripVertical 
-                className={`w-4 h-4 transition-colors duration-200 ${
-                  selectedTileId === tileId 
-                    ? 'text-blue-400' 
-                    : selectedTileId && selectedTileId !== tileId
-                    ? 'text-green-400 hover:text-green-300'
-                    : 'text-dark-text-secondary hover:text-dark-text'
-                }`}
-              />
-            </button>
-          )}
-          <span className={`w-6 h-6 mr-3 ${color}`}>{icon}</span>
-          {editMode ? (
+        <div className="flex items-center space-x-3 flex-1 min-w-0">
+          <div className={`${color} flex-shrink-0`}>
+            {icon}
+          </div>
+          {isEditing ? (
             <input
               type="text"
-              value={title}
-              onChange={(e) => updateTile(tileId, { title: e.target.value })}
-              className="text-xl font-semibold bg-transparent text-dark-text border-b border-dark-border focus:outline-none focus:border-blue-400"
-              onMouseDown={(e) => e.stopPropagation()}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={handleKeyDown}
+              className="flex-1 bg-transparent border-b border-blue-400 text-dark-text text-sm font-semibold focus:outline-none"
+              autoFocus
             />
           ) : (
-            <h2 className="text-xl font-semibold text-dark-text">{title}</h2>
+            <h3 
+              className={`text-sm font-semibold ${color} truncate cursor-pointer hover:text-opacity-80 transition-colors duration-200`}
+              onClick={() => editMode && setIsEditing(true)}
+              title={editMode ? "Click to edit title" : title}
+            >
+              {title}
+            </h3>
           )}
         </div>
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 flex-shrink-0">
           {editMode && (
-            <>
-                <select
-                value={tile.columns || 3}
-                onChange={(e) => {
-                  const columns = parseInt(e.target.value) as TileColumns;
-                  updateTile(tileId, { columns });
-                }}
-                className="text-xs px-2 py-1 bg-dark-bg border border-dark-border rounded text-dark-text focus:outline-none focus:border-blue-400"
-                title="Tile width"
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <option value={2}>2 Columns</option>
-                <option value={3}>3 Columns</option>
-                <option value={4}>4 Columns</option>
-                <option value={5}>5 Columns</option>
-              </select>
-              <button
-                onClick={() => removeTile(tileId)}
-                className="p-1 rounded hover:bg-red-500/20 transition-colors duration-200 text-red-400 hover:text-red-300"
-                title="Remove tile"
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          {!editMode && (
             <button
-              onClick={() => expandTile(tileId)}
-              className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
-              title="Cycle tile size"
+              onClick={(e) => handleTileSelect(tileId, e)}
+              className={`p-1 rounded transition-all duration-200 ${
+                selectedTileId === tileId
+                  ? 'bg-blue-500 text-white shadow-lg' 
+                  : 'text-dark-text-secondary hover:text-dark-text hover:bg-dark-border'
+              }`}
+              title="Select tile for reordering"
             >
-              <Maximize2 className="w-4 h-4" />
+              <GripVertical className="w-3 h-3" />
             </button>
           )}
           <button
+            onClick={() => expandTile(tileId)}
+            className="text-dark-text-secondary hover:text-green-400 transition-colors duration-200 p-1 rounded hover:bg-dark-border"
+            title="Resize tile (cycles through sizes)"
+          >
+            <Expand className="w-3 h-3" />
+          </button>
+          <button
             onClick={() => toggleFullscreen(tileId)}
-            className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
+            className="text-dark-text-secondary hover:text-blue-400 transition-colors duration-200 p-1 rounded hover:bg-dark-border"
             title="Toggle fullscreen"
           >
-            <Expand className="w-4 h-4" />
+            <Maximize2 className="w-3 h-3" />
           </button>
-          {!editMode && (((tile.columns || 3) !== 3 || (tile.height || GRID_CONFIG.defaultTileHeight) !== GRID_CONFIG.defaultTileHeight) || tile.isFullscreen) && (
+          {editMode && (
             <button
-              onClick={() => resetTile(tileId)}
-              className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
-              title="Reset tile"
+              onClick={() => removeTile(tileId)}
+              className="text-dark-text-secondary hover:text-red-400 transition-colors duration-200 p-1 rounded hover:bg-dark-border"
+              title="Remove tile"
             >
-              <Minimize2 className="w-4 h-4" />
+              <X className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -210,223 +264,27 @@ const Dashboard: React.FC = () => {
     )
   }
 
-  const fullscreenTile = getFullscreenTile()
-
-  const renderTileContent = (tileType: string) => {
-    const content = (() => {
-      switch (tileType) {
-        case 'news':
-          return <NewsFeeds />
-        case 'weather':
-          return <WeatherWidget />
-        case 'todo':
-          return <TodoList />
-        case 'shortcuts':
-          return <Shortcuts />
-        case 'livestreams':
-          return <Livestreams />
-        case 'ai-chat':
-          return <AIChat />
-        case 'minigames':
-          return <Minigames />
-        case 'travel':
-          return <TravelWidget />
-        default:
-          return <div className="text-dark-text-secondary">Unknown tile type</div>
-      }
-    })()
-
-    return (
-      <Suspense fallback={
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400"></div>
-        </div>
-      }>
-        {content}
-      </Suspense>
-    )
-  }
-
-  const getTileIcon = (tileType: string) => {
-    const iconMap = {
-      'news': <Rss className="w-6 h-6" />,
-      'weather': <Cloud className="w-6 h-6" />,
-      'todo': <CheckSquare className="w-6 h-6" />,
-      'shortcuts': <ExternalLink className="w-6 h-6" />,
-      'livestreams': <Video className="w-6 h-6" />,
-      'ai-chat': <Bot className="w-6 h-6" />,
-      'minigames': <Gamepad2 className="w-6 h-6" />,
-      'travel': <MapPin className="w-6 h-6" />
-    }
-    return iconMap[tileType as keyof typeof iconMap] || <div className="w-6 h-6" />
-  }
-
-  const getTileColor = (tileType: string) => {
-    const colorMap = {
-      'news': 'text-blue-400',
-      'weather': 'text-sky-400', 
-      'todo': 'text-green-400',
-      'shortcuts': 'text-purple-400',
-      'livestreams': 'text-red-400',
-      'ai-chat': 'text-blue-400',
-      'minigames': 'text-purple-400',
-      'travel': 'text-orange-400'
-    }
-    return colorMap[tileType as keyof typeof colorMap] || 'text-gray-400'
-  }
-
-  const TileComponent: React.FC<{ 
-    tileId: string, 
-    icon: React.ReactNode, 
-    title: string, 
-    color: string,
-    component: React.ReactNode,
-    animationDelay?: string
-  }> = ({ tileId, icon, title, color, component, animationDelay = '0s' }) => {
-    const isSelected = selectedTileId === tileId
-    const isTargetAvailable = selectedTileId && selectedTileId !== tileId
+  const TileComponent: React.FC<{
+    tileId: string
+    icon: React.ReactNode
+    title: string
+    color: string
+    component: React.ReactNode
+  }> = ({ tileId, icon, title, color, component }) => {
     const tile = tiles.find(t => t.id === tileId)
-
     if (!tile) return null
 
-    const getTileWidth = () => {
-      const containerWidth = 1200 // Base container width
-      const gap = GRID_CONFIG.gap
-      const availableWidth = containerWidth - (gap * 5) // 4 gaps for 5 columns max
-      
-      // Safe fallback for columns - ensure we have a valid value
-      const safeColumns = tile.columns || 3
-      if (safeColumns < 2 || safeColumns > 5) {
-        console.warn(`Invalid tile columns: ${safeColumns}, using default 3`)
-        return Math.floor((availableWidth * 3) / 12)
-      }
-      
-      return Math.floor((availableWidth * safeColumns) / 12) // 12-column grid
-    }
+    const fullscreenTile = getFullscreenTile()
+    const isSelected = selectedTileId === tileId
+    const isTargetAvailable = selectedTileId && selectedTileId !== tileId
+    const animationDelay = `${tiles.indexOf(tile) * 100}ms`
 
-    const handleColumnChange = (columns: TileColumns) => {
-      updateTile(tileId, { columns })
-    }
-
-    if (editMode && !fullscreenTile) {
-      const tileWidth = getTileWidth()
-      const currentSize = tileSizes[tileId] || { width: tileWidth, height: tile.height }
-      
-      return (
-        <ResizableBox
-          width={currentSize.width}
-          height={currentSize.height}
-          minConstraints={[COLUMN_WIDTHS[2].minWidth, GRID_CONFIG.minTileHeight]}
-          maxConstraints={[COLUMN_WIDTHS[5].baseWidth, 800]}
-          resizeHandles={['se', 's', 'e']}
-          handle={
-            <div className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize group">
-              <div className="absolute bottom-1 right-1 w-4 h-4 bg-blue-500 hover:bg-blue-400 rounded-tl-lg flex items-end justify-end transition-colors duration-200">
-                <Move className="w-2 h-2 text-white m-0.5" />
-              </div>
-            </div>
-          }
-          onResize={handleResize(tileId)}
-          onResizeStop={(e, data) => {
-            handleResize(tileId)(e, data)
-            let newHeight = data.size.height
-            
-            // Snap to grid if enabled
-            if (gridMode) {
-              newHeight = Math.round(newHeight / GRID_CONFIG.gap) * GRID_CONFIG.gap
-            }
-            
-            // Determine columns based on width
-            let newColumns: TileColumns = 3
-            const width = data.size.width
-            if (width >= COLUMN_WIDTHS[5].minWidth) newColumns = 5
-            else if (width >= COLUMN_WIDTHS[4].minWidth) newColumns = 4
-            else if (width >= COLUMN_WIDTHS[3].minWidth) newColumns = 3
-            else newColumns = 2
-            
-            updateTile(tileId, { columns: newColumns, height: newHeight })
-          }}
-          className="group relative"
-        >
-          <div
-            className={`
-              glass-effect rounded-2xl p-6 animate-slide-up flex flex-col 
-              transition-all duration-300 h-full relative
-              ${isSelected 
-                ? 'border-2 border-blue-500 shadow-lg shadow-blue-500/25 bg-blue-500/10 scale-105' 
-                : 'border-2 border-blue-400/30 hover:border-blue-400/50'
-              }
-              ${isTargetAvailable && !isSelected
-                ? 'border-green-400/50 hover:border-green-400 hover:bg-green-400/5 cursor-pointer' 
-                : ''
-              }
-            `}
-            style={{ animationDelay, width: '100%', height: '100%' }}
-            onClick={(e) => handleTileClick(tileId, e)}
-          >
-            <TileHeader 
-              tileId={tileId} 
-              icon={icon} 
-              title={title} 
-              color={color} 
-            />
-            <div className="flex-1 overflow-hidden min-h-0 max-h-full">
-              <div className="h-full overflow-y-auto scrollbar-thin">
-                {component}
-              </div>
-            </div>
-            
-            {/* Enhanced Edit Mode Indicators */}
-            {editMode && (
-              <>
-                <div className={`absolute top-1 right-1 text-white text-xs px-2 py-1 rounded-md transition-all duration-200 ${
-                  isSelected ? 'bg-blue-500 shadow-lg' : 'bg-blue-500/75'
-                }`}>
-                  {isSelected ? 'SELECTED' : `${tile.columns || 3} COL`}
-                </div>
-                
-                {/* Column adjustment buttons */}
-                <div className="absolute top-1 left-1 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  {[2, 3, 4, 5].map(cols => (
-                    <button
-                      key={cols}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleColumnChange(cols as TileColumns)
-                      }}
-                      className={`w-6 h-6 rounded text-xs font-bold flex items-center justify-center transition-all duration-200 ${
-                        (tile.columns || 3) === cols
-                          ? 'bg-blue-500 text-white shadow-md'
-                          : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
-                      }`}
-                      title={`${cols} columns`}
-                    >
-                      {cols}
-                    </button>
-                  ))}
-                </div>
-                
-                {/* Target indicator when tile can be swapped */}
-                {isTargetAvailable && !isSelected && (
-                  <div className="absolute inset-0 border-2 border-dashed border-green-400/50 rounded-2xl bg-green-400/10 flex items-center justify-center backdrop-blur-sm">
-                    <div className="text-green-400 font-medium text-sm bg-green-900/50 px-3 py-1 rounded-lg">
-                      Click to swap here
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </ResizableBox>
-      )
-    }
-
-    // Non-edit mode or fullscreen tile
     return (
       <div
         className={`
           glass-effect rounded-2xl p-6 animate-slide-up flex flex-col 
           transition-all duration-300 group h-full relative
+          ${getTileClass(tileId)}
           ${editMode ? 'border-2' : 'border border-transparent'}
           ${isSelected 
             ? 'border-blue-500 shadow-lg shadow-blue-500/25 bg-blue-500/5 scale-105' 
@@ -440,11 +298,7 @@ const Dashboard: React.FC = () => {
           }
           ${fullscreenTile?.id === tileId ? 'fixed inset-4 z-50 !w-full !h-full' : ''}
         `}
-        style={{ 
-          animationDelay,
-          width: editMode ? `${getTileWidth()}px` : 'auto',
-          height: editMode ? `${tile.height}px` : 'auto'
-        }}
+        style={{ animationDelay }}
         onClick={(e) => handleTileClick(tileId, e)}
       >
         <TileHeader 
@@ -465,7 +319,7 @@ const Dashboard: React.FC = () => {
             <div className={`absolute top-1 right-1 text-white text-xs px-2 py-1 rounded-md transition-all duration-200 ${
               isSelected ? 'bg-blue-500 shadow-lg' : 'bg-blue-500/75'
             }`}>
-              {isSelected ? 'SELECTED' : `${tile.columns || 3} COL`}
+              {isSelected ? 'SELECTED' : tile.size.toUpperCase()}
             </div>
             
             {/* Target indicator when tile can be swapped */}
@@ -481,6 +335,8 @@ const Dashboard: React.FC = () => {
       </div>
     )
   }
+
+  const fullscreenTile = getFullscreenTile()
 
   if (fullscreenTile) {
     // Render only the fullscreen tile
@@ -498,7 +354,7 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-dark-bg via-dark-bg to-slate-900">
+    <div className="w-full min-h-screen bg-gradient-to-br from-dark-bg via-dark-bg to-slate-900" onClick={handleClickOutside}>
       {/* Header */}
       <div className="mb-8 text-center animate-fade-in p-6">
         <div className="flex items-center justify-between mb-4">
@@ -535,26 +391,13 @@ const Dashboard: React.FC = () => {
             </button>
 
             {editMode && (
-              <>
-                <button
-                  onClick={() => setGridMode(!gridMode)}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    gridMode 
-                      ? 'bg-purple-500 hover:bg-purple-600 shadow-lg' 
-                      : 'bg-dark-card hover:bg-dark-border'
-                  }`}
-                  title={gridMode ? "Disable snap-to-grid" : "Enable snap-to-grid"}
-                >
-                  <Grid3X3 className={`w-4 h-4 ${gridMode ? 'text-white' : 'text-dark-text-secondary'}`} />
-                </button>
-                <button
-                  onClick={resetToDefaults}
-                  className="p-2 rounded-lg bg-orange-500 hover:bg-orange-600 transition-colors duration-200"
-                  title="Reset to default layout"
-                >
-                  <RotateCcw className="w-4 h-4 text-white" />
-                </button>
-              </>
+              <button
+                onClick={resetToDefaults}
+                className="p-2 rounded-lg bg-orange-500 hover:bg-orange-600 transition-colors duration-200"
+                title="Reset to default layout"
+              >
+                <RotateCcw className="w-4 h-4 text-white" />
+              </button>
             )}
           </div>
           
@@ -576,9 +419,9 @@ const Dashboard: React.FC = () => {
               </div>
               <div>
                 <div className="font-medium text-blue-200 mb-1">Customization:</div>
-                <div>• Drag corners to resize tiles</div>
-                <div>• Use column buttons (2,3,4,5) for width</div>
-                <div>• Click titles to rename them</div>
+                <div>• Click expand button (⤢) to resize tiles</div>
+                <div>• Click tile titles to rename them</div>
+                <div>• Use fullscreen button (⛶) for focus mode</div>
               </div>
             </div>
             {selectedTileId && (
@@ -599,131 +442,43 @@ const Dashboard: React.FC = () => {
         </p>
       </div>
 
-      {/* Dashboard Layout - Column-Based Grid System */}
-      <div 
-        ref={containerRef} 
-        className="px-6 pb-20 relative"
-        onClick={handleClickOutside}
-      >
-        {editMode ? (
-          // Edit mode - Smart positioning with collision detection
-          <div 
-            className="relative min-h-screen"
-            style={{
-              backgroundImage: gridMode ? `
-                linear-gradient(to right, rgba(59, 130, 246, 0.1) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(59, 130, 246, 0.1) 1px, transparent 1px)
-              ` : 'none',
-              backgroundSize: gridMode ? `${GRID_CONFIG.gap}px ${GRID_CONFIG.gap}px` : 'auto'
-            }}
-          >
-            {getSortedTiles().map((tile, index) => {
-              const animationDelay = `${index * 0.1}s`
-              
-              // Calculate position with collision avoidance
-              const getTilePosition = () => {
-                if (tile.x !== undefined && tile.y !== undefined) {
-                  return { x: tile.x, y: tile.y }
-                }
-                
-                // Auto-position with collision detection
-                const safeColumns = tile.columns || 3
-                const safeHeight = tile.height || GRID_CONFIG.defaultTileHeight
-                
-                // Ensure columns is within valid range
-                const validColumns = Math.max(2, Math.min(5, safeColumns)) as TileColumns
-                const tileWidth = COLUMN_WIDTHS[validColumns]?.baseWidth || COLUMN_WIDTHS[3].baseWidth
-                
-                const maxX = Math.max(0, 1200 - tileWidth - GRID_CONFIG.gap)
-                const row = Math.floor(index / 3)
-                const col = index % 3
-                
-                return {
-                  x: Math.min(col * (tileWidth + GRID_CONFIG.gap), maxX),
-                  y: row * (safeHeight + GRID_CONFIG.gap)
-                }
+      {/* Tiles Grid */}
+      <div className="px-6 pb-6">
+        <div className="grid grid-cols-12 auto-rows-fr gap-6 min-h-[400px]">
+          {getSortedTiles().map((tile) => (
+            <Suspense 
+              key={tile.id} 
+              fallback={
+                <div className={`${getTileClass(tile.id)} glass-effect rounded-2xl p-6 flex items-center justify-center`}>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                </div>
               }
-              
-              const position = getTilePosition()
-              
-              return (
-                <div 
-                  key={tile.id}
-                  ref={el => tileRefs.current[tile.id] = el}
-                  className="absolute transition-all duration-300 ease-out"
-                  style={{
-                    left: `${position.x}px`,
-                    top: `${position.y}px`,
-                    zIndex: selectedTileId === tile.id ? 100 : 10
-                  }}
-                >
-                  <TileComponent
-                    tileId={tile.id}
-                    icon={getTileIcon(tile.type)}
-                    title={tile.title}
-                    color={getTileColor(tile.type)}
-                    component={renderTileContent(tile.type)}
-                    animationDelay={animationDelay}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          // Normal mode - Responsive CSS Grid with column spans
-          <div 
-            className="grid gap-6"
-            style={{ 
-              gridTemplateColumns: 'repeat(12, 1fr)',
-              gridAutoRows: 'minmax(250px, auto)'
-            }}
-          >
-            {getSortedTiles().map((tile, index) => {
-              const animationDelay = `${index * 0.1}s`
-              
-              // Safe defaults for columns and height
-              const safeColumns = tile.columns || 3
-              const safeHeight = tile.height || GRID_CONFIG.defaultTileHeight
-              const validColumns = Math.max(2, Math.min(5, safeColumns))
-              
-              const columnSpan = Math.round((validColumns * 12) / 5) // Map to 12-column grid
-              const gridRowSpan = Math.max(1, Math.ceil(safeHeight / 250))
-              
-              return (
-                <div 
-                  key={tile.id}
-                  ref={el => tileRefs.current[tile.id] = el}
-                  className={`col-span-${Math.min(columnSpan, 12)}`}
-                  style={{ 
-                    minHeight: `${safeHeight}px`,
-                    gridRowEnd: `span ${gridRowSpan}`
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <TileComponent
-                    tileId={tile.id}
-                    icon={getTileIcon(tile.type)}
-                    title={tile.title}
-                    color={getTileColor(tile.type)}
-                    component={renderTileContent(tile.type)}
-                    animationDelay={animationDelay}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        )}
+            >
+              <TileComponent
+                tileId={tile.id}
+                icon={getTileIcon(tile.type)}
+                title={tile.title}
+                color={getTileColor(tile.type)}
+                component={renderTileContent(tile.type)}
+              />
+            </Suspense>
+          ))}
+        </div>
       </div>
 
       {/* Add Tile Modal */}
-      <AddTileModal
-        isOpen={showAddTile}
-        onClose={() => setShowAddTile(false)}
-        availableTileTypes={getAvailableTileTypes()}
-        existingTiles={tiles.map(t => ({ id: t.id, type: t.type, title: t.title }))}
-        onAddTile={addTile}
-        onDuplicateTile={duplicateTile}
-      />
+      {showAddTile && (
+        <Suspense fallback={<div>Loading...</div>}>
+          <AddTileModal
+            isOpen={showAddTile}
+            onClose={() => setShowAddTile(false)}
+            availableTileTypes={getAvailableTileTypes()}
+            existingTiles={tiles}
+            onAddTile={addTile}
+            onDuplicateTile={duplicateTile}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
