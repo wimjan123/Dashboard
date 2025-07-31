@@ -133,10 +133,59 @@ const DEFAULT_TILES: DynamicTileConfig[] = [
   { id: 'travel-1', type: 'travel', title: 'Travel & Commute', columns: 4, height: 300, order: 5, isFullscreen: false },
 ]
 
+// Migration helper to convert old tile format to new column-based format
+const migrateTileData = (tiles: any[]): DynamicTileConfig[] => {
+  return tiles.map(tile => {
+    // If tile already has columns, it's already migrated
+    if (tile.columns !== undefined) {
+      return tile as DynamicTileConfig
+    }
+
+    // Migrate old width-based tiles to column-based tiles
+    let columns: TileColumns = 3 // Default
+    
+    if (tile.width !== undefined) {
+      // Map old width values to columns
+      if (tile.width <= 250) columns = 2
+      else if (tile.width <= 350) columns = 3
+      else if (tile.width <= 500) columns = 4
+      else columns = 5
+    }
+
+    // Ensure we have a valid height
+    const height = tile.height || GRID_CONFIG.defaultTileHeight
+
+    return {
+      id: tile.id,
+      type: tile.type,
+      title: tile.title,
+      columns,
+      height,
+      order: tile.order || 0,
+      x: tile.x,
+      y: tile.y,
+      isFullscreen: tile.isFullscreen || false,
+      config: tile.config
+    } as DynamicTileConfig
+  })
+}
+
 export const useDynamicTiles = () => {
   const [tiles, setTiles] = useState<DynamicTileConfig[]>(() => {
     const savedTiles = localStorage.getItem('dashboard-dynamic-tiles')
-    return savedTiles ? JSON.parse(savedTiles) : DEFAULT_TILES
+    if (savedTiles) {
+      try {
+        const parsedTiles = JSON.parse(savedTiles)
+        const migratedTiles = migrateTileData(parsedTiles)
+        // Save migrated data back to localStorage
+        localStorage.setItem('dashboard-dynamic-tiles', JSON.stringify(migratedTiles))
+        return migratedTiles
+      } catch (error) {
+        console.warn('Failed to parse saved tiles, using defaults:', error)
+        return DEFAULT_TILES
+      }
+    }
+    return DEFAULT_TILES
   })
 
   const [draggedTile, setDraggedTile] = useState<string | null>(null)

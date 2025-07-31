@@ -156,7 +156,7 @@ const Dashboard: React.FC = () => {
           {editMode && (
             <>
                 <select
-                value={tile.columns}
+                value={tile.columns || 3}
                 onChange={(e) => {
                   const columns = parseInt(e.target.value) as TileColumns;
                   updateTile(tileId, { columns });
@@ -196,7 +196,7 @@ const Dashboard: React.FC = () => {
           >
             <Expand className="w-4 h-4" />
           </button>
-          {!editMode && ((tile.columns !== 3 || tile.height !== GRID_CONFIG.defaultTileHeight) || tile.isFullscreen) && (
+          {!editMode && (((tile.columns || 3) !== 3 || (tile.height || GRID_CONFIG.defaultTileHeight) !== GRID_CONFIG.defaultTileHeight) || tile.isFullscreen) && (
             <button
               onClick={() => resetTile(tileId)}
               className="p-1 rounded hover:bg-dark-border transition-colors duration-200 text-dark-text-secondary hover:text-dark-text"
@@ -293,7 +293,15 @@ const Dashboard: React.FC = () => {
       const containerWidth = 1200 // Base container width
       const gap = GRID_CONFIG.gap
       const availableWidth = containerWidth - (gap * 5) // 4 gaps for 5 columns max
-      return Math.floor((availableWidth * tile.columns) / 12) // 12-column grid
+      
+      // Safe fallback for columns - ensure we have a valid value
+      const safeColumns = tile.columns || 3
+      if (safeColumns < 2 || safeColumns > 5) {
+        console.warn(`Invalid tile columns: ${safeColumns}, using default 3`)
+        return Math.floor((availableWidth * 3) / 12)
+      }
+      
+      return Math.floor((availableWidth * safeColumns) / 12) // 12-column grid
     }
 
     const handleColumnChange = (columns: TileColumns) => {
@@ -374,7 +382,7 @@ const Dashboard: React.FC = () => {
                 <div className={`absolute top-1 right-1 text-white text-xs px-2 py-1 rounded-md transition-all duration-200 ${
                   isSelected ? 'bg-blue-500 shadow-lg' : 'bg-blue-500/75'
                 }`}>
-                  {isSelected ? 'SELECTED' : `${tile.columns} COL`}
+                  {isSelected ? 'SELECTED' : `${tile.columns || 3} COL`}
                 </div>
                 
                 {/* Column adjustment buttons */}
@@ -387,7 +395,7 @@ const Dashboard: React.FC = () => {
                         handleColumnChange(cols as TileColumns)
                       }}
                       className={`w-6 h-6 rounded text-xs font-bold flex items-center justify-center transition-all duration-200 ${
-                        tile.columns === cols
+                        (tile.columns || 3) === cols
                           ? 'bg-blue-500 text-white shadow-md'
                           : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
                       }`}
@@ -457,7 +465,7 @@ const Dashboard: React.FC = () => {
             <div className={`absolute top-1 right-1 text-white text-xs px-2 py-1 rounded-md transition-all duration-200 ${
               isSelected ? 'bg-blue-500 shadow-lg' : 'bg-blue-500/75'
             }`}>
-              {isSelected ? 'SELECTED' : `${tile.columns} COL`}
+              {isSelected ? 'SELECTED' : `${tile.columns || 3} COL`}
             </div>
             
             {/* Target indicator when tile can be swapped */}
@@ -619,14 +627,20 @@ const Dashboard: React.FC = () => {
                 }
                 
                 // Auto-position with collision detection
-                const tileWidth = COLUMN_WIDTHS[tile.columns].baseWidth
-                const maxX = 1200 - tileWidth - GRID_CONFIG.gap
+                const safeColumns = tile.columns || 3
+                const safeHeight = tile.height || GRID_CONFIG.defaultTileHeight
+                
+                // Ensure columns is within valid range
+                const validColumns = Math.max(2, Math.min(5, safeColumns)) as TileColumns
+                const tileWidth = COLUMN_WIDTHS[validColumns]?.baseWidth || COLUMN_WIDTHS[3].baseWidth
+                
+                const maxX = Math.max(0, 1200 - tileWidth - GRID_CONFIG.gap)
                 const row = Math.floor(index / 3)
                 const col = index % 3
                 
                 return {
                   x: Math.min(col * (tileWidth + GRID_CONFIG.gap), maxX),
-                  y: row * (tile.height + GRID_CONFIG.gap)
+                  y: row * (safeHeight + GRID_CONFIG.gap)
                 }
               }
               
@@ -666,7 +680,14 @@ const Dashboard: React.FC = () => {
           >
             {getSortedTiles().map((tile, index) => {
               const animationDelay = `${index * 0.1}s`
-              const columnSpan = Math.round((tile.columns * 12) / 5) // Map to 12-column grid
+              
+              // Safe defaults for columns and height
+              const safeColumns = tile.columns || 3
+              const safeHeight = tile.height || GRID_CONFIG.defaultTileHeight
+              const validColumns = Math.max(2, Math.min(5, safeColumns))
+              
+              const columnSpan = Math.round((validColumns * 12) / 5) // Map to 12-column grid
+              const gridRowSpan = Math.max(1, Math.ceil(safeHeight / 250))
               
               return (
                 <div 
@@ -674,8 +695,8 @@ const Dashboard: React.FC = () => {
                   ref={el => tileRefs.current[tile.id] = el}
                   className={`col-span-${Math.min(columnSpan, 12)}`}
                   style={{ 
-                    minHeight: `${tile.height}px`,
-                    gridRowEnd: `span ${Math.ceil(tile.height / 250)}`
+                    minHeight: `${safeHeight}px`,
+                    gridRowEnd: `span ${gridRowSpan}`
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
