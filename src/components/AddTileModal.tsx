@@ -132,7 +132,7 @@ const AddTileModal: React.FC<AddTileModalProps> = ({
                         </p>
                         <div className="flex items-center space-x-2 mt-2">
                           <span className="text-xs px-2 py-1 bg-dark-card rounded text-dark-text-secondary">
-                            {tileType.defaultSize}
+                            medium (default)
                           </span>
                           {tileType.allowMultiple && (
                             <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">

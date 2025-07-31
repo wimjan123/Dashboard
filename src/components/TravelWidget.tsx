@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react'
-import { MapPin, Navigation, Clock, Car, Train, Bike, Users, AlertCircle, Loader, RefreshCw, Star, BookmarkPlus, Bookmark, ArrowUpDown, Home, Building2 } from 'lucide-react'
+import { MapPin, Navigation, Clock, Car, Train, Bike, Users, AlertCircle, Loader, RefreshCw, Star, BookmarkPlus, Bookmark, ArrowUpDown, Home, Building2, Bus, Zap, Calendar, Timer } from 'lucide-react'
 
 interface Location {
   lat: number
   lng: number
   address?: string
+  placeId?: string
+}
+
+interface SearchResult {
+  placeId: string
+  name: string
+  address: string
+  lat: number
+  lng: number
 }
 
 interface Route {
@@ -13,6 +22,14 @@ interface Route {
   durationInTraffic?: string
   mode: 'driving' | 'walking' | 'transit' | 'bicycling'
   steps?: string[]
+  transitDetails?: {
+    departureTime?: string
+    arrivalTime?: string
+    transfers?: number
+    agencies?: string[]
+    fare?: string
+    lines?: string[]
+  }
 }
 
 interface SavedDestination {
@@ -38,6 +55,11 @@ const TravelWidget: React.FC = () => {
   const [savedDestinations, setSavedDestinations] = useState<SavedDestination[]>([])
   const [savedDepartures, setSavedDepartures] = useState<SavedDestination[]>([])
   const [showSaved, setShowSaved] = useState(false)
+  const [departureSuggestions, setDepartureSuggestions] = useState<SearchResult[]>([])
+  const [destinationSuggestions, setDestinationSuggestions] = useState<SearchResult[]>([])
+  const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false)
+  const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
 
   const modes = [
     { id: 'driving' as const, name: 'Drive', icon: Car, color: 'text-blue-400' },
@@ -138,6 +160,91 @@ const TravelWidget: React.FC = () => {
     }
   }
 
+  const searchLocations = async (query: string): Promise<SearchResult[]> => {
+    if (!query.trim()) return []
+    
+    try {
+      // Using Nominatim for autocomplete search
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`
+      )
+      const data = await response.json()
+      
+      return data.map((item: any) => ({
+        placeId: item.place_id,
+        name: item.display_name.split(',')[0],
+        address: item.display_name,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon)
+      }))
+    } catch (error) {
+      console.error('Search error:', error)
+      return []
+    }
+  }
+
+  const handleDepartureSearch = async (value: string) => {
+    setDeparture(value)
+    setDepartureLocation(null)
+    
+    if (value.trim().length > 2) {
+      const results = await searchLocations(value)
+      setDepartureSuggestions(results)
+      setShowDepartureSuggestions(true)
+    } else {
+      setDepartureSuggestions([])
+      setShowDepartureSuggestions(false)
+    }
+  }
+
+  const handleDestinationSearch = async (value: string) => {
+    setDestination(value)
+    setDestinationLocation(null)
+    
+    if (value.trim().length > 2) {
+      const results = await searchLocations(value)
+      setDestinationSuggestions(results)
+      setShowDestinationSuggestions(true)
+    } else {
+      setDestinationSuggestions([])
+      setShowDestinationSuggestions(false)
+    }
+  }
+
+  const selectDepartureLocation = (result: SearchResult) => {
+    setDeparture(result.address)
+    setDepartureLocation({
+      lat: result.lat,
+      lng: result.lng,
+      address: result.address,
+      placeId: result.placeId
+    })
+    setShowDepartureSuggestions(false)
+    
+    // Add to recent searches
+    setRecentSearches(prev => {
+      const updated = [result.address, ...prev.filter(addr => addr !== result.address)].slice(0, 5)
+      return updated
+    })
+  }
+
+  const selectDestinationLocation = (result: SearchResult) => {
+    setDestination(result.address)
+    setDestinationLocation({
+      lat: result.lat,
+      lng: result.lng,
+      address: result.address,
+      placeId: result.placeId
+    })
+    setShowDestinationSuggestions(false)
+    
+    // Add to recent searches
+    setRecentSearches(prev => {
+      const updated = [result.address, ...prev.filter(addr => addr !== result.address)].slice(0, 5)
+      return updated
+    })
+  }
+
   const calculateRoute = async () => {
     const originLocation = useCurrentLocation ? currentLocation : departureLocation
     
@@ -188,6 +295,11 @@ const TravelWidget: React.FC = () => {
     destination: Location, 
     mode: 'driving' | 'walking' | 'transit' | 'bicycling'
   ): Promise<Route | null> => {
+    if (mode === 'transit') {
+      // Enhanced transit routing with mock data for demonstration
+      return calculateTransitRoute(origin, destination)
+    }
+    
     // Using OSRM for routing (free service)
     const profile = mode === 'driving' ? 'car' : mode === 'bicycling' ? 'bike' : 'foot'
     
@@ -211,6 +323,44 @@ const TravelWidget: React.FC = () => {
     }
     
     return null
+  }
+
+  const calculateTransitRoute = async (origin: Location, destination: Location): Promise<Route | null> => {
+    // Calculate approximate distance for transit estimation
+    const distance = calculateDistance(origin, destination)
+    
+    // Mock transit data based on distance
+    const baseTime = Math.max(15, distance * 2) // Minimum 15 minutes
+    const transfers = distance > 10 ? Math.floor(distance / 8) : 0
+    
+    const now = new Date()
+    const departureTime = new Date(now.getTime() + 5 * 60000) // 5 minutes from now
+    const arrivalTime = new Date(departureTime.getTime() + baseTime * 60000)
+    
+    return {
+      distance: formatDistance(distance * 1000),
+      duration: formatDuration(baseTime * 60),
+      mode: 'transit',
+      transitDetails: {
+        departureTime: departureTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        arrivalTime: arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        transfers,
+        agencies: transfers > 0 ? ['Metro', 'Bus'] : ['Bus'],
+        fare: `€${(2.5 + transfers * 0.5).toFixed(2)}`,
+        lines: transfers > 0 ? ['Line 1', 'Bus 42'] : ['Bus 15']
+      }
+    }
+  }
+
+  const calculateDistance = (origin: Location, destination: Location): number => {
+    const R = 6371 // Earth's radius in km
+    const dLat = (destination.lat - origin.lat) * Math.PI / 180
+    const dLng = (destination.lng - origin.lng) * Math.PI / 180
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(origin.lat * Math.PI / 180) * Math.cos(destination.lat * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c
   }
 
   const formatDistance = (meters: number): string => {
@@ -372,13 +522,28 @@ const TravelWidget: React.FC = () => {
               <input
                 type="text"
                 value={departure}
-                onChange={(e) => {
-                  setDeparture(e.target.value)
-                  setDepartureLocation(null)
-                }}
+                onChange={(e) => handleDepartureSearch(e.target.value)}
                 placeholder="Enter departure location..."
                 className="w-full pl-3 pr-4 py-2 bg-dark-bg border border-dark-border rounded text-dark-text placeholder-dark-text-secondary focus:outline-none focus:border-blue-400 transition-colors duration-200 text-sm"
+                onFocus={() => departure.trim() && setShowDepartureSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowDepartureSuggestions(false), 200)}
               />
+              
+              {/* Departure Suggestions */}
+              {showDepartureSuggestions && departureSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-dark-card border border-dark-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {departureSuggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.placeId}
+                      className="px-4 py-2 hover:bg-dark-bg cursor-pointer text-sm text-dark-text"
+                      onClick={() => selectDepartureLocation(suggestion)}
+                    >
+                      <div className="font-medium">{suggestion.name}</div>
+                      <div className="text-xs text-dark-text-secondary truncate">{suggestion.address}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -408,14 +573,29 @@ const TravelWidget: React.FC = () => {
             <input
               type="text"
               value={destination}
-              onChange={(e) => {
-                setDestination(e.target.value)
-                setDestinationLocation(null)
-              }}
+              onChange={(e) => handleDestinationSearch(e.target.value)}
               placeholder="Enter destination..."
               className="w-full pl-3 pr-4 py-2 bg-dark-card border border-dark-border rounded-lg text-dark-text placeholder-dark-text-secondary focus:outline-none focus:border-blue-400 transition-colors duration-200"
               onKeyPress={(e) => e.key === 'Enter' && calculateRoute()}
+              onFocus={() => destination.trim() && setShowDestinationSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowDestinationSuggestions(false), 200)}
             />
+            
+            {/* Destination Suggestions */}
+            {showDestinationSuggestions && destinationSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-dark-card border border-dark-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {destinationSuggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.placeId}
+                    className="px-4 py-2 hover:bg-dark-bg cursor-pointer text-sm text-dark-text"
+                    onClick={() => selectDestinationLocation(suggestion)}
+                  >
+                    <div className="font-medium">{suggestion.name}</div>
+                    <div className="text-xs text-dark-text-secondary truncate">{suggestion.address}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <button
             onClick={() => setShowSaved(!showSaved)}
@@ -571,56 +751,126 @@ const TravelWidget: React.FC = () => {
             })}
           </div>
 
-          {/* Selected Route Details */}
-          {selectedRoute && (
-            <div className="space-y-3">
-              <div className="p-4 bg-dark-card rounded-lg border border-dark-border">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <Clock className="w-5 h-5 mx-auto mb-1 text-blue-400" />
-                    <div className="text-lg font-semibold text-dark-text">{selectedRoute.duration}</div>
-                    <div className="text-xs text-dark-text-secondary">Duration</div>
-                    {selectedRoute.durationInTraffic && (
-                      <div className="text-xs text-orange-400 mt-1">
-                        {selectedRoute.durationInTraffic} in traffic
+              {/* Selected Route Details */}
+              {selectedRoute && (
+                <div className="space-y-3">
+                  <div className="p-4 bg-dark-card rounded-lg border border-dark-border">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <Clock className="w-5 h-5 mx-auto mb-1 text-blue-400" />
+                        <div className="text-lg font-semibold text-dark-text">{selectedRoute.duration}</div>
+                        <div className="text-xs text-dark-text-secondary">Duration</div>
+                        {selectedRoute.durationInTraffic && (
+                          <div className="text-xs text-orange-400 mt-1">
+                            {selectedRoute.durationInTraffic} in traffic
+                          </div>
+                        )}
                       </div>
-                    )}
+                      <div className="text-center">
+                        <Navigation className="w-5 h-5 mx-auto mb-1 text-green-400" />
+                        <div className="text-lg font-semibold text-dark-text">{selectedRoute.distance}</div>
+                        <div className="text-xs text-dark-text-secondary">Distance</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <Navigation className="w-5 h-5 mx-auto mb-1 text-green-400" />
-                    <div className="text-lg font-semibold text-dark-text">{selectedRoute.distance}</div>
-                    <div className="text-xs text-dark-text-secondary">Distance</div>
+
+                  {/* Enhanced Transit Details */}
+                  {selectedRoute.mode === 'transit' && selectedRoute.transitDetails && (
+                    <div className="p-4 bg-purple-500/10 border border-purple-400/30 rounded-lg">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Train className="w-5 h-5 text-purple-400" />
+                        <span className="text-sm font-medium text-purple-400">Public Transport Details</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-3">
+                        <div className="text-center">
+                          <Timer className="w-4 h-4 mx-auto mb-1 text-green-400" />
+                          <div className="text-sm font-semibold text-dark-text">{selectedRoute.transitDetails.departureTime}</div>
+                          <div className="text-xs text-dark-text-secondary">Departure</div>
+                        </div>
+                        <div className="text-center">
+                          <Clock className="w-4 h-4 mx-auto mb-1 text-blue-400" />
+                          <div className="text-sm font-semibold text-dark-text">{selectedRoute.transitDetails.arrivalTime}</div>
+                          <div className="text-xs text-dark-text-secondary">Arrival</div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {selectedRoute.transitDetails.transfers !== undefined && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-dark-text-secondary">Transfers:</span>
+                            <span className="text-xs text-dark-text font-medium">
+                              {selectedRoute.transitDetails.transfers === 0 ? 'Direct' : `${selectedRoute.transitDetails.transfers} transfer${selectedRoute.transitDetails.transfers > 1 ? 's' : ''}`}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {selectedRoute.transitDetails.fare && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-dark-text-secondary">Estimated Fare:</span>
+                            <span className="text-xs text-green-400 font-medium">{selectedRoute.transitDetails.fare}</span>
+                          </div>
+                        )}
+
+                        {selectedRoute.transitDetails.lines && selectedRoute.transitDetails.lines.length > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-dark-text-secondary">Lines:</span>
+                            <div className="flex space-x-1">
+                              {selectedRoute.transitDetails.lines.map((line, index) => (
+                                <span key={index} className="text-xs bg-purple-500 text-white px-2 py-1 rounded">
+                                  {line}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedRoute.transitDetails.agencies && selectedRoute.transitDetails.agencies.length > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-dark-text-secondary">Operators:</span>
+                            <div className="flex space-x-1">
+                              {selectedRoute.transitDetails.agencies.map((agency, index) => (
+                                <span key={index} className="text-xs text-dark-text flex items-center space-x-1">
+                                  {agency === 'Bus' && <Bus className="w-3 h-3" />}
+                                  {agency === 'Metro' && <Train className="w-3 h-3" />}
+                                  <span>{agency}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick Actions */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        const originLocation = useCurrentLocation ? currentLocation : departureLocation
+                        if (originLocation && destinationLocation) {
+                          const mode = selectedRoute.mode === 'transit' ? 'transit' : selectedRoute.mode === 'walking' ? 'walking' : selectedRoute.mode === 'bicycling' ? 'bicycling' : 'driving'
+                          const url = `https://www.google.com/maps/dir/${originLocation.lat},${originLocation.lng}/${destinationLocation.lat},${destinationLocation.lng}/@${(originLocation.lat + destinationLocation.lat) / 2},${(originLocation.lng + destinationLocation.lng) / 2},12z/data=!3m1!4b1!4m2!4m1!3e${mode === 'driving' ? '0' : mode === 'walking' ? '2' : mode === 'transit' ? '3' : '1'}`
+                          window.open(url, '_blank')
+                        }
+                      }}
+                      className="py-2 px-3 bg-green-500 hover:bg-green-600 rounded-lg text-white text-sm transition-colors duration-200"
+                    >
+                      Open in Maps
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (destinationLocation) {
+                          navigator.clipboard.writeText(destination)
+                        }
+                      }}
+                      className="py-2 px-3 bg-dark-card hover:bg-opacity-80 rounded-lg text-dark-text text-sm border border-dark-border transition-colors duration-200"
+                    >
+                      Copy Address
+                    </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    const originLocation = useCurrentLocation ? currentLocation : departureLocation
-                    if (originLocation && destinationLocation) {
-                      const url = `https://www.google.com/maps/dir/${originLocation.lat},${originLocation.lng}/${destinationLocation.lat},${destinationLocation.lng}`
-                      window.open(url, '_blank')
-                    }
-                  }}
-                  className="py-2 px-3 bg-green-500 hover:bg-green-600 rounded-lg text-white text-sm transition-colors duration-200"
-                >
-                  Open in Maps
-                </button>
-                <button
-                  onClick={() => {
-                    if (destinationLocation) {
-                      navigator.clipboard.writeText(destination)
-                    }
-                  }}
-                  className="py-2 px-3 bg-dark-card hover:bg-opacity-80 rounded-lg text-dark-text text-sm border border-dark-border transition-colors duration-200"
-                >
-                  Copy Address
-                </button>
-              </div>
-            </div>
-          )}
+              )}
         </div>
       )}
     </div>

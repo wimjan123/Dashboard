@@ -86,6 +86,97 @@ body {
   overflow: hidden;
 }
 
+/* Tile height optimization */
+.tile-container {
+  min-height: 280px;
+  max-height: 400px;
+  height: auto;
+  will-change: transform, opacity;
+  contain: layout style paint;
+}
+
+.tile-content {
+  max-height: 320px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.tile-compact {
+  min-height: 200px;
+  max-height: 280px;
+}
+
+.tile-spacious {
+  min-height: 350px;
+  max-height: 500px;
+}
+
+/* Enhanced theme transitions */
+.theme-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-minimal {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  backdrop-filter: none;
+}
+
+.theme-neon {
+  background: var(--color-card);
+  border: 1px solid rgb(96, 165, 250, 0.5);
+  box-shadow: 0 10px 25px rgba(96, 165, 250, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.theme-vintage {
+  background: color-mix(in srgb, #fffbeb 5%, var(--color-card));
+  border: 1px solid rgb(251, 191, 36, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+/* Edit mode improvements */
+.edit-mode-tile {
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.edit-mode-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.edit-mode-tile.selected {
+  box-shadow: 0 0 0 2px #3b82f6, 0 8px 25px rgba(59, 130, 246, 0.25);
+}
+
+.edit-mode-tile.dragging {
+  opacity: 0.8;
+  transform: scale(0.98);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  cursor: se-resize;
+  z-index: 10;
+}
+
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #3b82f6;
+  border-bottom: 2px solid #3b82f6;
+}
+
 /* Drag and drop enhancements */
 [draggable="true"] {
   -webkit-user-drag: element;
@@ -144,6 +235,66 @@ body {
   -ms-user-select: none;
 }
 
+/* Grid layout optimizations */
+.dashboard-grid {
+  display: grid;
+  transition: gap 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  contain: layout;
+}
+
+.dashboard-grid.compact {
+  gap: 0.5rem;
+}
+
+.dashboard-grid.balanced {
+  gap: 1rem;
+}
+
+.dashboard-grid.spacious {
+  gap: 1.5rem;
+}
+
+/* Lazy loading optimizations */
+.tile-loading {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .5;
+  }
+}
+
+/* Slider customizations for music player and other components */
+.slider {
+  background: transparent;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ec4899;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ec4899;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
 /* Touch device support */
 @media (hover: none) and (pointer: coarse) {
   .hover-lift:hover {
@@ -165,5 +316,10 @@ body {
   
   .group:active .group-hover\:opacity-100 {
     opacity: 1;
+  }
+
+  /* Improve touch targets */
+  .tile-container {
+    min-height: 320px;
   }
 }
